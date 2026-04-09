@@ -1,34 +1,43 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Users from "./pages/Users";
+import Courses from "./pages/Courses";
+import Enrollments from "./pages/Enrollments";
 import Lectures from "./pages/Lectures";
-import Assignments from "./pages/Assignments"; // ✅ ADD THIS
+import Assignments from "./pages/Assignments";
 
+
+// 🔐 PROTECTED ROUTE
 function ProtectedRoute({ children, adminOnly = false }) {
   const user = JSON.parse(localStorage.getItem("user") || "null");
 
+  // ❌ If not logged in → go to login
   if (!user) return <Navigate to="/" replace />;
+
+  // ❌ If not admin → block admin pages
   if (adminOnly && user.role !== "admin") {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/" replace />;
   }
 
   return children;
 }
+
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
 
-        {/* Public */}
+        {/* PUBLIC ROUTE */}
         <Route path="/" element={<Login />} />
 
-        {/* Protected */}
+        {/* ADMIN ROUTES */}
         <Route
           path="/dashboard"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute adminOnly={true}>
               <Dashboard />
             </ProtectedRoute>
           }
@@ -44,6 +53,25 @@ function App() {
         />
 
         <Route
+          path="/courses"
+          element={
+            <ProtectedRoute adminOnly={true}>
+              <Courses />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/enrollments"
+          element={
+            <ProtectedRoute adminOnly={true}>
+              <Enrollments />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* TEACHER / STUDENT ROUTES */}
+        <Route
           path="/lectures"
           element={
             <ProtectedRoute>
@@ -52,7 +80,6 @@ function App() {
           }
         />
 
-        {/* ✅ NEW ROUTE */}
         <Route
           path="/assignments"
           element={
@@ -62,7 +89,7 @@ function App() {
           }
         />
 
-        {/* Catch-all */}
+        {/* DEFAULT FALLBACK */}
         <Route path="*" element={<Navigate to="/" replace />} />
 
       </Routes>

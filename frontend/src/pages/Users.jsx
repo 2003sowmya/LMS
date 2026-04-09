@@ -1,245 +1,234 @@
-import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
-import API from "../api"; // ✅ use axios API
+import API from "../api";
 import "../App.css";
 
-function Users() {
+export default function Users() {
+  const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+
   const [users, setUsers] = useState([]);
-  const [newUser, setNewUser] = useState({ username: "", password: "", role: "student" });
+  const [toast, setToast] = useState(null);
   const [editingUser, setEditingUser] = useState(null);
-  const [editPassword, setEditPassword] = useState("");
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState({ text: "", type: "" });
 
-  const navigate = useNavigate();
-  const currentUser = JSON.parse(localStorage.getItem("user"));
+  const [newUser, setNewUser] = useState({
+    username: "",
+    password: "",
+    role: "student",
+    department: "CS",
+  });
 
-  // 🔐 Role check
-  useEffect(() => {
-    if (!currentUser || currentUser.role !== "admin") {
-      alert("Access denied");
-      navigate("/dashboard");
-    }
-  }, []);
-
-  const showMessage = (text, type = "success") => {
-    setMessage({ text, type });
-    setTimeout(() => setMessage({ text: "", type: "" }), 3000);
-  };
-
-  // ✅ FETCH USERS
-  const fetchUsers = async () => {
-    try {
-      const res = await API.get("users/");
-      setUsers(res.data);
-    } catch (err) {
-      showMessage("Failed to load users", "error");
-    }
-  };
+  const departments = ["CS", "IT", "ECE", "EEE"];
 
   useEffect(() => {
     fetchUsers();
   }, []);
 
-  // ✅ CREATE USER
-  const createUser = async () => {
-    if (!newUser.username.trim() || !newUser.password.trim()) {
-      showMessage("Username and password are required", "error");
-      return;
-    }
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  };
 
-    setLoading(true);
+  const fetchUsers = async () => {
     try {
-      await API.post("users/", newUser);
-
-      setNewUser({ username: "", password: "", role: "student" });
-      setShowAddForm(false);
-      showMessage("User created successfully");
-      fetchUsers();
-    } catch (err) {
-      showMessage("Failed to create user", "error");
-    } finally {
-      setLoading(false);
+      const res = await API.get("users/");
+      setUsers(res.data);
+    } catch {
+      showToast("Error loading users");
     }
   };
 
-  // ✅ UPDATE USER
-  const updateUser = async () => {
-    if (!editingUser.username.trim()) {
-      showMessage("Username cannot be empty", "error");
-      return;
+  const handleAddUser = async () => {
+    if (!newUser.username || !newUser.password) {
+      return showToast("Fill all fields");
     }
 
-    setLoading(true);
     try {
-      const payload = {
-        username: editingUser.username,
-        role: editingUser.role,
-      };
+      const res = await API.post("users/", newUser);
+      setUsers((prev) => [...prev, res.data]);
 
-      if (editPassword.trim()) {
-        payload.password = editPassword;
-      }
+      setNewUser({
+        username: "",
+        password: "",
+        role: "student",
+        department: "CS",
+      });
 
-      await API.put(`users/${editingUser.id}/`, payload);
+      showToast("User added");
+    } catch {
+      showToast("Error adding user");
+    }
+  };
+
+  const handleEdit = (u) => {
+    setEditingUser(u);
+    setNewUser({
+      username: u.username,
+      password: "",
+      role: u.role,
+      department: u.department,
+    });
+  };
+
+  const handleUpdateUser = async () => {
+    try {
+      await API.put(`users/${editingUser.id}/`, {
+        username: newUser.username,
+        role: newUser.role,
+        department: newUser.department,
+      });
 
       setEditingUser(null);
-      setEditPassword("");
-      showMessage("User updated successfully");
       fetchUsers();
-    } catch (err) {
-      showMessage("Update failed", "error");
-    } finally {
-      setLoading(false);
+
+      setNewUser({
+        username: "",
+        password: "",
+        role: "student",
+        department: "CS",
+      });
+
+      showToast("User updated");
+    } catch {
+      showToast("Update failed");
     }
   };
 
-  // ✅ DELETE USER
-  const deleteUser = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this user?")) return;
-
-    setLoading(true);
+  const handleDelete = async (id) => {
     try {
       await API.delete(`users/${id}/`);
-      showMessage("User deleted successfully");
-      fetchUsers();
-    } catch (err) {
-      showMessage("Delete failed", "error");
-    } finally {
-      setLoading(false);
+      setUsers((prev) => prev.filter((u) => u.id !== id));
+      showToast("User deleted");
+    } catch {
+      showToast("Delete failed");
     }
   };
 
-  const roleBadgeClass = (role) => {
-    if (role === "admin") return "badge badge-admin";
-    if (role === "teacher") return "badge badge-teacher";
-    return "badge badge-student";
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good Morning";
+    if (hour < 18) return "Good Afternoon";
+    return "Good Evening";
   };
 
   return (
-    <>
-      <Navbar />
+    <div className="layout">
+      <Sidebar />
 
-      <div
-        className="page"
-        style={{
-          marginTop: "56px",
-          width: "100%",
-          maxWidth: "100%",
-          padding: "32px 48px",
-          boxSizing: "border-box",
-        }}
-      >
-        {/* Header */}
-        <div className="page-header" style={{ marginBottom: "24px" }}>
-          <div>
-            <div className="page-title">User management</div>
-            <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
-              {users.length} total user{users.length !== 1 ? "s" : ""}
+      <div className="main">
+        <Navbar />
+
+        <div className="content">
+          <h1>LMS Administrator</h1>
+          <p className="subtitle">Manage departments and users</p>
+
+          <p className="greeting">
+            {getGreeting()}, {currentUser.username}
+          </p>
+
+          {/* FORM */}
+          <div className="card">
+            <h3>{editingUser ? "Edit User" : "Register User"}</h3>
+
+            <div className="form-grid">
+              <input
+                placeholder="Username"
+                value={newUser.username}
+                onChange={(e) =>
+                  setNewUser({ ...newUser, username: e.target.value })
+                }
+              />
+
+              <input
+                type="password"
+                placeholder="Password"
+                value={newUser.password}
+                onChange={(e) =>
+                  setNewUser({ ...newUser, password: e.target.value })
+                }
+              />
+
+              <select
+                value={newUser.department}
+                onChange={(e) =>
+                  setNewUser({ ...newUser, department: e.target.value })
+                }
+              >
+                {departments.map((d) => (
+                  <option key={d}>{d}</option>
+                ))}
+              </select>
+
+              <select
+                value={newUser.role}
+                onChange={(e) =>
+                  setNewUser({ ...newUser, role: e.target.value })
+                }
+              >
+                <option value="student">Student</option>
+                <option value="teacher">Teacher</option>
+              </select>
+
+              {editingUser ? (
+                <button className="btn btn-primary" onClick={handleUpdateUser}>
+                  Update
+                </button>
+              ) : (
+                <button className="btn btn-primary" onClick={handleAddUser}>
+                  Create
+                </button>
+              )}
             </div>
           </div>
 
-          <button
-            className="btn-primary"
-            onClick={() => {
-              setShowAddForm(!showAddForm);
-              setEditingUser(null);
-              setEditPassword("");
-            }}
-          >
-            {showAddForm ? "Cancel" : "+ Add user"}
-          </button>
+          {/* TABLE */}
+          <div className="card">
+            <table>
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Dept</th>
+                  <th>Role</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {users.map((u) => (
+                  <tr key={u.id}>
+                    <td>{u.username}</td>
+                    <td>{u.department}</td>
+                    <td>
+                      <span className={`role-badge role-${u.role}`}>
+                        {u.role}
+                      </span>
+                    </td>
+                    <td>
+                      <button
+                        className="btn-edit"
+                        onClick={() => handleEdit(u)}
+                      >
+                        Edit
+                      </button>
+
+                      <button
+                        className="btn btn-danger"
+                        onClick={() => handleDelete(u.id)}
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-
-        {/* Message */}
-        {message.text && (
-          <div
-            style={{
-              padding: "10px 16px",
-              borderRadius: 8,
-              marginBottom: 16,
-              fontSize: 14,
-              fontWeight: 500,
-              background: message.type === "error" ? "#fee2e2" : "#dcfce7",
-              color: message.type === "error" ? "#b91c1c" : "#166534",
-            }}
-          >
-            {message.text}
-          </div>
-        )}
-
-        {/* Add Form */}
-        {showAddForm && (
-          <div className="card" style={{ marginBottom: 20 }}>
-            <div className="card-title">New user</div>
-
-            <input
-              placeholder="Username"
-              value={newUser.username}
-              onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
-            />
-
-            <input
-              type="password"
-              placeholder="Password"
-              value={newUser.password}
-              onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-            />
-
-            <select
-              value={newUser.role}
-              onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
-            >
-              <option value="student">Student</option>
-              <option value="teacher">Teacher</option>
-              <option value="admin">Admin</option>
-            </select>
-
-            <button onClick={createUser} disabled={loading}>
-              {loading ? "Creating..." : "Create"}
-            </button>
-          </div>
-        )}
-
-        {/* Users List */}
-        <table className="table">
-          <thead>
-            <tr>
-              <th>S.No</th>
-              <th>Username</th>
-              <th>Role</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {users.map((user, index) => (
-              <tr key={user.id}>
-                <td>{index + 1}</td>
-                <td>{user.username}</td>
-                <td>{user.role}</td>
-
-                <td>
-                  <button
-                    onClick={() => {
-                      setEditingUser(user);
-                      setEditPassword("");
-                    }}
-                  >
-                    Edit
-                  </button>
-
-                  <button onClick={() => deleteUser(user.id)}>Delete</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
-    </>
+
+      {toast && <div className="toast">{toast}</div>}
+    </div>
   );
 }
+/*   background: #e8f0fe; */
 
-export default Users;

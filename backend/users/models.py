@@ -10,3 +10,5 @@ class User(AbstractUser):
     )
 
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='student')
+    department = models.CharField(max_length=50, default="General")
+    
