@@ -20,14 +20,14 @@ class IsAdminOnly(BasePermission):
 class CourseViewSet(viewsets.ModelViewSet):
     queryset = Course.objects.all().order_by('-created_at')
     serializer_class = CourseSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = []
 
 
 # ===================== ENROLLMENT VIEWSET =====================
 class EnrollmentViewSet(viewsets.ModelViewSet):
     queryset = Enrollment.objects.all().order_by('-enrolled_at')
     serializer_class = EnrollmentSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = []
 
 
 # ===================== ADMIN DASHBOARD API =====================

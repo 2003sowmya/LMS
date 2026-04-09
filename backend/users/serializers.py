@@ -3,22 +3,37 @@ from .models import User
 
 
 class UserSerializer(serializers.ModelSerializer):
+
     class Meta:
         model = User
-        fields = ['id', 'username', 'password', 'email', 'role', 'department']
+        fields = [
+            'id',
+            'username',
+            'password',
+            'email',
+            'role',
+            'department',
+
+            # ✅ NEW FIELDS
+            'roll_number',
+            'employee_id'
+        ]
+
         extra_kwargs = {
-            'password': {'write_only': True}
+            'password': {'write_only': True},
+            'roll_number': {'read_only': True},   # auto generated
+            'employee_id': {'read_only': True}    # auto generated
         }
 
-    # ✅ CREATE USER (FIXED)
+    # ✅ CREATE USER
     def create(self, validated_data):
-        password = validated_data.pop('password')   # 🔥 FIX
+        password = validated_data.pop('password')
         user = User(**validated_data)
         user.set_password(password)
         user.save()
         return user
 
-    # ✅ UPDATE USER (VERY IMPORTANT)
+    # ✅ UPDATE USER
     def update(self, instance, validated_data):
         password = validated_data.pop('password', None)
 

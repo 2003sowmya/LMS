@@ -120,7 +120,7 @@ export default function Users() {
 
         <div className="content">
           <h1>LMS Administrator</h1>
-          <p className="subtitle">Manage departments and users</p>
+          <p className="subtitle">User Management</p>
 
           <p className="greeting">
             {getGreeting()}, {currentUser.username}

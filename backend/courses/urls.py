@@ -3,9 +3,14 @@ from django.urls import path
 from .views import CourseViewSet, EnrollmentViewSet, admin_dashboard
 
 router = DefaultRouter()
-router.register(r'courses', CourseViewSet, basename='courses')
-router.register(r'enrollments', EnrollmentViewSet, basename='enrollments')  # ✅ NEW
 
-urlpatterns = router.urls + [
-    path('admin-dashboard/', admin_dashboard),  # ✅ NEW
+# ================= ROUTES =================
+router.register(r'courses', CourseViewSet, basename='course')
+router.register(r'enrollments', EnrollmentViewSet, basename='enrollment')
+
+# ================= URLPATTERNS =================
+urlpatterns = [
+    path('admin-dashboard/', admin_dashboard, name='admin-dashboard'),
 ]
+
+urlpatterns += router.urls

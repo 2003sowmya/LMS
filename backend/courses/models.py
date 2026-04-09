@@ -9,28 +9,31 @@ class Course(models.Model):
     title = models.CharField(max_length=200)
     description = models.TextField()
 
+    # Each course is assigned to a teacher
     teacher = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        limit_choices_to={'role': 'teacher'},
+        limit_choices_to={'role': 'teacher'},   # Only users with role=teacher
         related_name='teaching_courses'
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return self.title
+        return f"{self.title} - {self.teacher.username}"
 
 
 # ===================== ENROLLMENT MODEL =====================
 class Enrollment(models.Model):
+    # Student enrolling
     student = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        limit_choices_to={'role': 'student'},
+        limit_choices_to={'role': 'student'},   # Only users with role=student
         related_name='enrollments'
     )
 
+    # Course being enrolled
     course = models.ForeignKey(
         Course,
         on_delete=models.CASCADE,
@@ -39,9 +42,10 @@ class Enrollment(models.Model):
 
     enrolled_at = models.DateTimeField(auto_now_add=True)
 
-    # Prevent duplicate enrollments
+    # Prevent duplicate enrollment
     class Meta:
         unique_together = ['student', 'course']
+        ordering = ['-enrolled_at']   # Latest first
 
     def __str__(self):
         return f"{self.student.username} enrolled in {self.course.title}"

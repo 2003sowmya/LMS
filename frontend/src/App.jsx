@@ -9,14 +9,26 @@ import Lectures from "./pages/Lectures";
 import Assignments from "./pages/Assignments";
 
 
-// 🔐 PROTECTED ROUTE
+// ===================== SAFE USER PARSER =====================
+const getUser = () => {
+  try {
+    return JSON.parse(localStorage.getItem("user"));
+  } catch {
+    return null;
+  }
+};
+
+
+// ===================== PROTECTED ROUTE =====================
 function ProtectedRoute({ children, adminOnly = false }) {
-  const user = JSON.parse(localStorage.getItem("user") || "null");
+  const user = getUser();
 
-  // ❌ If not logged in → go to login
-  if (!user) return <Navigate to="/" replace />;
+  // ❌ Not logged in
+  if (!user) {
+    return <Navigate to="/" replace />;
+  }
 
-  // ❌ If not admin → block admin pages
+  // ❌ Not admin (for admin routes)
   if (adminOnly && user.role !== "admin") {
     return <Navigate to="/" replace />;
   }
@@ -25,13 +37,17 @@ function ProtectedRoute({ children, adminOnly = false }) {
 }
 
 
+// ===================== APP =====================
 function App() {
   return (
     <BrowserRouter>
       <Routes>
 
-        {/* PUBLIC ROUTE */}
+        {/* PUBLIC */}
         <Route path="/" element={<Login />} />
+
+        {/* DEFAULT REDIRECT AFTER LOGIN */}
+        <Route path="/home" element={<Navigate to="/dashboard" replace />} />
 
         {/* ADMIN ROUTES */}
         <Route
@@ -70,7 +86,7 @@ function App() {
           }
         />
 
-        {/* TEACHER / STUDENT ROUTES */}
+        {/* COMMON ROUTES (Teacher / Student) */}
         <Route
           path="/lectures"
           element={
@@ -89,7 +105,7 @@ function App() {
           }
         />
 
-        {/* DEFAULT FALLBACK */}
+        {/* FALLBACK */}
         <Route path="*" element={<Navigate to="/" replace />} />
 
       </Routes>
