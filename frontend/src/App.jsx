@@ -7,6 +7,9 @@ import Courses from "./pages/Courses";
 import Enrollments from "./pages/Enrollments";
 import Lectures from "./pages/Lectures";
 import Assignments from "./pages/Assignments";
+import StudentHome from "./pages/StudentHome";
+import StudentCourses from "./pages/StudentCourses"; // ✅ NEW
+import TeacherHome from "./pages/TeacherHome";
 
 
 // ===================== SAFE USER PARSER =====================
@@ -29,11 +32,27 @@ function ProtectedRoute({ children, adminOnly = false }) {
   }
 
   // ❌ Not admin (for admin routes)
-  if (adminOnly && user.role !== "admin") {
+  if (adminOnly && user.role?.toLowerCase() !== "admin") {
     return <Navigate to="/" replace />;
   }
 
   return children;
+}
+
+
+// ===================== ROLE BASED REDIRECT =====================
+function RoleRedirect() {
+  const user = getUser();
+
+  if (!user) return <Navigate to="/" replace />;
+
+  const role = user.role?.toLowerCase();
+
+  if (role === "admin") return <Navigate to="/dashboard" replace />;
+  if (role === "teacher") return <Navigate to="/teacher" replace />;
+  if (role === "student") return <Navigate to="/student" replace />;
+
+  return <Navigate to="/" replace />;
 }
 
 
@@ -46,10 +65,10 @@ function App() {
         {/* PUBLIC */}
         <Route path="/" element={<Login />} />
 
-        {/* DEFAULT REDIRECT AFTER LOGIN */}
-        <Route path="/home" element={<Navigate to="/dashboard" replace />} />
+        {/* AUTO REDIRECT AFTER LOGIN */}
+        <Route path="/home" element={<RoleRedirect />} />
 
-        {/* ADMIN ROUTES */}
+        {/* ================= ADMIN ROUTES ================= */}
         <Route
           path="/dashboard"
           element={
@@ -86,7 +105,37 @@ function App() {
           }
         />
 
-        {/* COMMON ROUTES (Teacher / Student) */}
+        {/* ================= TEACHER ROUTE ================= */}
+        <Route
+          path="/teacher"
+          element={
+            <ProtectedRoute>
+              <TeacherHome />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ================= STUDENT ROUTES ================= */}
+        <Route
+          path="/student"
+          element={
+            <ProtectedRoute>
+              <StudentHome />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ✅ NEW: STUDENT COURSES PAGE */}
+        <Route
+          path="/student/courses"
+          element={
+            <ProtectedRoute>
+              <StudentCourses />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ================= COMMON ROUTES ================= */}
         <Route
           path="/lectures"
           element={
@@ -105,7 +154,7 @@ function App() {
           }
         />
 
-        {/* FALLBACK */}
+        {/* ================= FALLBACK ================= */}
         <Route path="*" element={<Navigate to="/" replace />} />
 
       </Routes>

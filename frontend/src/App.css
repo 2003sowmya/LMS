@@ -115,13 +115,15 @@ html, body {
 /* ================= DASHBOARD MAIN ================= */
 .main {
   margin-left: 270px;
-  width: calc(100vw - 300px);
+  width: calc(100% - 270px);
+  box-sizing: border-box;
 }
 
 /* ================= CONTENT ================= */
 .content {
-  padding: 90px 20px 30px;
+  padding: 90px 30px 30px;
   width: 100%;
+  box-sizing: border-box;
 }
 
 /* ================= HEADER ================= */
@@ -145,7 +147,7 @@ html, body {
 /* ================= CARDS ================= */
 .cards {
   display: grid;
-  grid-template-columns: repeat(4, 1fr); /* 4 cards in one line */
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 20px;
   width: 100%;
 }
@@ -162,7 +164,7 @@ html, body {
   align-items: center;
 
   color: white;
-  font-weight: 600;
+  font-weight: 800;
 
   box-shadow: 0 10px 25px rgba(0,0,0,0.08);
   transition: all 0.25s ease;
@@ -182,7 +184,7 @@ html, body {
 }
 
 .dashboard-card.purple {
-  background: linear-gradient(135deg, #8b5cf6, #5b21b6);
+  background: linear-gradient(135deg, #0c061b, #5b21b6);
 }
 
 .dashboard-card.orange {
@@ -191,7 +193,7 @@ html, body {
 
 /* ================= TEXT ================= */
 .dashboard-card h4 {
-  font-size: 14px;
+  font-size: 23px;
   opacity: 0.9;
 }
 

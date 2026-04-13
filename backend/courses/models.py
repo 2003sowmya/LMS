@@ -49,3 +49,37 @@ class Enrollment(models.Model):
 
     def __str__(self):
         return f"{self.student.username} enrolled in {self.course.title}"
+    
+ # ===================== ASSIGNMENT MODEL =====================
+class Assignment(models.Model):
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.CASCADE,
+        related_name='assignments'
+    )
+
+    due_date = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.title} - {self.course.title}"
+
+
+# ===================== LECTURE MODEL =====================
+class Lecture(models.Model):
+    title = models.CharField(max_length=200)
+    video_url = models.URLField(blank=True, null=True)
+
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.CASCADE,
+        related_name='lectures'
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.title} - {self.course.title}"

@@ -1,11 +1,19 @@
 from rest_framework import viewsets
-from rest_framework.permissions import IsAuthenticated, BasePermission
+from rest_framework.permissions import BasePermission
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from django.contrib.auth import get_user_model
 
-from .models import Course, Enrollment
-from .serializers import CourseSerializer, EnrollmentSerializer
+# ✅ Import all models
+from .models import Course, Enrollment, Assignment, Lecture
+
+# ✅ Import all serializers
+from .serializers import (
+    CourseSerializer,
+    EnrollmentSerializer,
+    AssignmentSerializer,
+    LectureSerializer
+)
 
 User = get_user_model()
 
@@ -27,6 +35,20 @@ class CourseViewSet(viewsets.ModelViewSet):
 class EnrollmentViewSet(viewsets.ModelViewSet):
     queryset = Enrollment.objects.all().order_by('-enrolled_at')
     serializer_class = EnrollmentSerializer
+    permission_classes = []
+
+
+# ===================== ASSIGNMENT VIEWSET =====================
+class AssignmentViewSet(viewsets.ModelViewSet):
+    queryset = Assignment.objects.all().order_by('-created_at')
+    serializer_class = AssignmentSerializer
+    permission_classes = []
+
+
+# ===================== LECTURE VIEWSET =====================
+class LectureViewSet(viewsets.ModelViewSet):
+    queryset = Lecture.objects.all().order_by('-created_at')
+    serializer_class = LectureSerializer
     permission_classes = []
 
 

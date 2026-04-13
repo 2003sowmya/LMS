@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 function Login() {
@@ -9,11 +9,6 @@ function Login() {
   const [error, setError] = useState("");
 
   const navigate = useNavigate();
-
-  useEffect(() => {
-    const user = localStorage.getItem("user");
-    if (user) navigate("/dashboard");
-  }, []);
 
   const handleLogin = async () => {
     setError("");
@@ -27,33 +22,36 @@ function Login() {
 
     try {
       const response = await fetch(
-        "http://127.0.0.1:8000/api/users/login/", // ✅ FIXED URL
+        "http://127.0.0.1:8000/api/users/login/",
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            username,
-            password,
-          }),
+          body: JSON.stringify({ username, password }),
         }
       );
 
       const data = await response.json();
+      console.log("LOGIN RESPONSE:", data);
 
       if (response.ok) {
         localStorage.setItem("user", JSON.stringify(data));
 
-        // ✅ Role-based navigation
-        if (data.role === "admin") navigate("/admin");
-        else if (data.role === "teacher") navigate("/teacher");
-        else navigate("/student");
+        const role = data.role?.toLowerCase();
+
+        if (role === "admin") navigate("/dashboard");
+        else if (role === "teacher") navigate("/teacher");
+        else if (role === "student") navigate("/student");
+        else setError("Invalid role from server");
+
       } else {
         setError(data.error || "Invalid username or password.");
       }
+
     } catch (err) {
-      setError("Unable to connect to the server. Please try again.");
+      console.log(err);
+      setError("Unable to connect to the server.");
     }
 
     setLoading(false);
@@ -62,7 +60,6 @@ function Login() {
   const handleKeyDown = (e) => {
     if (e.key === "Enter") handleLogin();
   };
-
   return (
     <div style={styles.page}>
       <div style={styles.wrapper}>
