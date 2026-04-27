@@ -23,7 +23,6 @@ INSTALLED_APPS = [
     # Custom apps
     'users',
     'courses',
-
     # Third-party
     'rest_framework',
     'corsheaders',
@@ -113,11 +112,22 @@ AUTH_USER_MODEL = 'users.User'
 
 # ===================== DRF =====================
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.SessionAuthentication',
-    ]
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
 }
 
+from datetime import timedelta
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=24),
+    'AUTH_HEADER_TYPES': ('Bearer',),   # 🔥 THIS IS THE FIX
+    
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.AllowAny',
+    ),
+    
+}
 
 # ===================== CORS + CSRF (IMPORTANT) =====================
 CORS_ALLOW_ALL_ORIGINS = True

@@ -1,74 +1,187 @@
-from rest_framework import viewsets
-from rest_framework.permissions import BasePermission
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.response import Response
+# ===================== IMPORTS =====================
 from django.contrib.auth import get_user_model
+from django.http import FileResponse
 
-# ✅ Import all models
-from .models import Course, Enrollment, Assignment, Lecture
+from rest_framework import viewsets
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
 
-# ✅ Import all serializers
+# ===================== MODELS =====================
+from .models import (
+    Course, Enrollment, Assignment, Submission, Lecture,
+    Note, LiveSession, Notification, Quiz, Question,
+    QuizAttempt, Mark
+)
+
+# ===================== SERIALIZERS =====================
 from .serializers import (
-    CourseSerializer,
-    EnrollmentSerializer,
-    AssignmentSerializer,
-    LectureSerializer
+    CourseSerializer, EnrollmentSerializer, AssignmentSerializer,
+    SubmissionSerializer, LectureSerializer, NoteSerializer,
+    LiveSessionSerializer, NotificationSerializer, QuizSerializer,
+    QuestionSerializer, QuizAttemptSerializer, MarkSerializer
 )
 
 User = get_user_model()
 
 
-# ===================== CUSTOM PERMISSION =====================
-class IsAdminOnly(BasePermission):
-    def has_permission(self, request, view):
-        return request.user.role == 'admin'
+# ===================== DASHBOARD APIs =====================
 
-
-# ===================== COURSE VIEWSET =====================
-class CourseViewSet(viewsets.ModelViewSet):
-    queryset = Course.objects.all().order_by('-created_at')
-    serializer_class = CourseSerializer
-    permission_classes = []
-
-
-# ===================== ENROLLMENT VIEWSET =====================
-class EnrollmentViewSet(viewsets.ModelViewSet):
-    queryset = Enrollment.objects.all().order_by('-enrolled_at')
-    serializer_class = EnrollmentSerializer
-    permission_classes = []
-
-
-# ===================== ASSIGNMENT VIEWSET =====================
-class AssignmentViewSet(viewsets.ModelViewSet):
-    queryset = Assignment.objects.all().order_by('-created_at')
-    serializer_class = AssignmentSerializer
-    permission_classes = []
-
-
-# ===================== LECTURE VIEWSET =====================
-class LectureViewSet(viewsets.ModelViewSet):
-    queryset = Lecture.objects.all().order_by('-created_at')
-    serializer_class = LectureSerializer
-    permission_classes = []
-
-
-# ===================== ADMIN DASHBOARD API =====================
+# ✅ ADMIN DASHBOARD
 @api_view(['GET'])
-@permission_classes([])
+@permission_classes([AllowAny])
 def admin_dashboard(request):
-    total_users = User.objects.count()
-    total_students = User.objects.filter(role='student').count()
-    total_teachers = User.objects.filter(role='teacher').count()
+    return Response({
+        "total_users": User.objects.count(),
+        "total_students": User.objects.filter(role='student').count(),
+        "total_teachers": User.objects.filter(role='teacher').count(),
+        "total_courses": Course.objects.count(),
+        "total_enrollments": Enrollment.objects.count(),
+    })
 
-    total_courses = Course.objects.count()
-    total_enrollments = Enrollment.objects.count()
 
-    data = {
-        "total_users": total_users,
-        "total_students": total_students,
-        "total_teachers": total_teachers,
-        "total_courses": total_courses,
-        "total_enrollments": total_enrollments,
-    }
+# ✅ TEACHER DASHBOARD
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def teacher_dashboard(request):
+    teacher = request.user
+
+    my_courses = Course.objects.filter(teacher=teacher)
+    course_ids = my_courses.values_list('id', flat=True)
+
+    return Response({
+        "courses": my_courses.count(),
+        "students": Enrollment.objects.filter(course_id__in=course_ids)
+                        .values('student').distinct().count(),
+        "enrollments": Enrollment.objects.filter(course_id__in=course_ids).count(),
+        "assignments": Assignment.objects.filter(course__in=my_courses).count(),
+    })
+
+
+# ✅ TEACHER STUDENTS
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def teacher_students(request):
+    teacher = request.user
+
+    my_courses = Course.objects.filter(teacher=teacher)
+    enrollments = Enrollment.objects.filter(course__in=my_courses).select_related('student')
+
+    data = [
+        {
+            "id": e.student.id,
+            "username": e.student.username,
+            "course": e.course.title,
+        }
+        for e in enrollments
+    ]
 
     return Response(data)
+
+
+# ===================== VIEWSETS =====================
+
+# ✅ COURSE
+class CourseViewSet(viewsets.ModelViewSet):
+    queryset = Course.objects.all()
+    serializer_class = CourseSerializer
+    permission_classes = [AllowAny]
+
+
+# ✅ ENROLLMENT
+class EnrollmentViewSet(viewsets.ModelViewSet):
+    queryset = Enrollment.objects.all()
+    serializer_class = EnrollmentSerializer
+    permission_classes = [AllowAny]
+
+
+# ✅ ASSIGNMENT
+class AssignmentViewSet(viewsets.ModelViewSet):
+    queryset = Assignment.objects.all()
+    serializer_class = AssignmentSerializer
+    permission_classes = [AllowAny]
+
+
+# ✅ SUBMISSION
+class SubmissionViewSet(viewsets.ModelViewSet):
+    queryset = Submission.objects.all()
+    serializer_class = SubmissionSerializer
+    permission_classes = [AllowAny]
+
+
+# ✅ LECTURE
+class LectureViewSet(viewsets.ModelViewSet):
+    queryset = Lecture.objects.all()
+    serializer_class = LectureSerializer
+    permission_classes = [AllowAny]
+
+
+# ✅ NOTE (🔥 FIXED)
+class NoteViewSet(viewsets.ModelViewSet):
+    queryset = Note.objects.all()
+    serializer_class = NoteSerializer
+    permission_classes = [AllowAny]
+
+    # 🔥 THIS FIX IS IMPORTANT
+    def get_serializer_context(self):
+        return {'request': self.request}
+
+    def perform_create(self, serializer):
+        serializer.save(uploaded_by=self.request.user)
+
+
+# ✅ OPTIONAL FILE SERVE (not needed if MEDIA works)
+def serve_note_file(request, pk):
+    note = Note.objects.get(pk=pk)
+    return FileResponse(note.file.open('rb'))
+
+
+# ✅ LIVE SESSION
+class LiveSessionViewSet(viewsets.ModelViewSet):
+    queryset = LiveSession.objects.all()
+    serializer_class = LiveSessionSerializer
+    permission_classes = [AllowAny]
+
+
+# ✅ NOTIFICATION
+class NotificationViewSet(viewsets.ModelViewSet):
+    serializer_class = NotificationSerializer
+    permission_classes = [AllowAny]
+
+    def get_queryset(self):
+        return Notification.objects.filter(user=self.request.user)
+
+
+# ✅ QUIZ
+class QuizViewSet(viewsets.ModelViewSet):
+    queryset = Quiz.objects.all()
+    serializer_class = QuizSerializer
+    permission_classes = [AllowAny]
+
+
+# ✅ QUESTION
+class QuestionViewSet(viewsets.ModelViewSet):
+    queryset = Question.objects.all()
+    serializer_class = QuestionSerializer
+    permission_classes = [AllowAny]
+
+
+# ✅ QUIZ ATTEMPT
+class QuizAttemptViewSet(viewsets.ModelViewSet):
+    queryset = QuizAttempt.objects.all()
+    serializer_class = QuizAttemptSerializer
+    permission_classes = [AllowAny]
+
+
+# ✅ MARK
+class MarkViewSet(viewsets.ModelViewSet):
+    queryset = Mark.objects.all()
+    serializer_class = MarkSerializer
+    permission_classes = [AllowAny]
+
+
+# ===================== DOWNLOAD =====================
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def download_marksheet(request):
+    return Response({"message": "Download working"})

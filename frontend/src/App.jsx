@@ -1,18 +1,34 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import Login from "./pages/Login";
-import Dashboard from "./pages/Dashboard";
-import Users from "./pages/Users";
-import Courses from "./pages/Courses";
-import Enrollments from "./pages/Enrollments";
-import Lectures from "./pages/Lectures";
-import Assignments from "./pages/Assignments";
-import StudentHome from "./pages/StudentHome";
-import StudentCourses from "./pages/StudentCourses"; // ✅ NEW
-import TeacherHome from "./pages/TeacherHome";
+
+// ================= ADMIN =================
+import Dashboard from "./pages/Admin/Dashboard";
+import Users from "./pages/Admin/Users";
+import Courses from "./pages/Admin/Courses";
+import Enrollments from "./pages/Admin/Enrollments";
+
+// ================= TEACHER =================
+import TeacherHome from "./pages/Teacher/TeacherHome";
+import Assignment from "./pages/Teacher/Assignment";
+import Lectures from "./pages/Teacher/Lectures";
+import LiveClass from "./pages/Teacher/LiveClass";
+import Quiz from "./pages/Teacher/Quiz";
+import Notes from "./pages/Teacher/Notes";
+import MyCourse from "./pages/Teacher/MyCourse";
+import Submissions from "./pages/Teacher/Submission";
+import Marks from "./pages/Teacher/Marks";
+import TeacherStudents from "./pages/Teacher/TeacherStudents"; // ✅ ADDED
+
+// ================= STUDENT =================
+import StudentHome from "./pages/Student/StudentHome";
+import StudentCourses from "./pages/Student/StudentCourses";
+import StudentAssignments from "./pages/Student/StudentAssignments";
+import StudentQuizzes from "./pages/Student/StudentQuizzes";
+import StudentGrades from "./pages/Student/StudentGrades";
 
 
-// ===================== SAFE USER PARSER =====================
+// ================= SAFE USER =================
 const getUser = () => {
   try {
     return JSON.parse(localStorage.getItem("user"));
@@ -22,17 +38,17 @@ const getUser = () => {
 };
 
 
-// ===================== PROTECTED ROUTE =====================
-function ProtectedRoute({ children, adminOnly = false }) {
+// ================= PROTECTED ROUTE =================
+function ProtectedRoute({ children, role, adminOnly = false }) {
   const user = getUser();
 
-  // ❌ Not logged in
-  if (!user) {
+  if (!user) return <Navigate to="/" replace />;
+
+  if (adminOnly && user.role?.toLowerCase() !== "admin") {
     return <Navigate to="/" replace />;
   }
 
-  // ❌ Not admin (for admin routes)
-  if (adminOnly && user.role?.toLowerCase() !== "admin") {
+  if (role && user.role?.toLowerCase() !== role.toLowerCase()) {
     return <Navigate to="/" replace />;
   }
 
@@ -40,7 +56,7 @@ function ProtectedRoute({ children, adminOnly = false }) {
 }
 
 
-// ===================== ROLE BASED REDIRECT =====================
+// ================= ROLE REDIRECT =================
 function RoleRedirect() {
   const user = getUser();
 
@@ -56,19 +72,20 @@ function RoleRedirect() {
 }
 
 
-// ===================== APP =====================
+// ================= APP =================
 function App() {
   return (
     <BrowserRouter>
       <Routes>
 
-        {/* PUBLIC */}
+        {/* ===== PUBLIC ===== */}
         <Route path="/" element={<Login />} />
 
-        {/* AUTO REDIRECT AFTER LOGIN */}
+        {/* ===== REDIRECT AFTER LOGIN ===== */}
         <Route path="/home" element={<RoleRedirect />} />
 
-        {/* ================= ADMIN ROUTES ================= */}
+
+        {/* ================= ADMIN ================= */}
         <Route
           path="/dashboard"
           element={
@@ -105,56 +122,147 @@ function App() {
           }
         />
 
-        {/* ================= TEACHER ROUTE ================= */}
+
+        {/* ================= TEACHER ================= */}
         <Route
           path="/teacher"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute role="teacher">
               <TeacherHome />
             </ProtectedRoute>
           }
         />
 
-        {/* ================= STUDENT ROUTES ================= */}
         <Route
-          path="/student"
+          path="/teacher/courses"
           element={
-            <ProtectedRoute>
-              <StudentHome />
+            <ProtectedRoute role="teacher">
+              <MyCourse />
             </ProtectedRoute>
           }
         />
 
-        {/* ✅ NEW: STUDENT COURSES PAGE */}
         <Route
-          path="/student/courses"
+          path="/teacher/students"   // ✅ FIXED
           element={
-            <ProtectedRoute>
-              <StudentCourses />
+            <ProtectedRoute role="teacher">
+              <TeacherStudents />
             </ProtectedRoute>
           }
         />
 
-        {/* ================= COMMON ROUTES ================= */}
         <Route
-          path="/lectures"
+          path="/teacher/assignments"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute role="teacher">
+              <Assignment />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/teacher/submissions"
+          element={
+            <ProtectedRoute role="teacher">
+              <Submissions />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/teacher/marks"
+          element={
+            <ProtectedRoute role="teacher">
+              <Marks />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/teacher/lectures"
+          element={
+            <ProtectedRoute role="teacher">
               <Lectures />
             </ProtectedRoute>
           }
         />
 
         <Route
-          path="/assignments"
+          path="/teacher/notes"
           element={
-            <ProtectedRoute>
-              <Assignments />
+            <ProtectedRoute role="teacher">
+              <Notes />
             </ProtectedRoute>
           }
         />
 
-        {/* ================= FALLBACK ================= */}
+        <Route
+          path="/teacher/live"
+          element={
+            <ProtectedRoute role="teacher">
+              <LiveClass />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/teacher/quiz"
+          element={
+            <ProtectedRoute role="teacher">
+              <Quiz />
+            </ProtectedRoute>
+          }
+        />
+
+
+        {/* ================= STUDENT ================= */}
+        <Route
+          path="/student"
+          element={
+            <ProtectedRoute role="student">
+              <StudentHome />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/student/courses"
+          element={
+            <ProtectedRoute role="student">
+              <StudentCourses />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/student/assignments"
+          element={
+            <ProtectedRoute role="student">
+              <StudentAssignments />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/student/quizzes"
+          element={
+            <ProtectedRoute role="student">
+              <StudentQuizzes />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/student/grades"
+          element={
+            <ProtectedRoute role="student">
+              <StudentGrades />
+            </ProtectedRoute>
+          }
+        />
+
+
+        {/* ===== FALLBACK ===== */}
         <Route path="*" element={<Navigate to="/" replace />} />
 
       </Routes>

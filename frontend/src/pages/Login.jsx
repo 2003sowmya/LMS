@@ -14,7 +14,7 @@ function Login() {
     setError("");
 
     if (!username || !password) {
-      setError("Please enter your username and password.");
+      setError("Please enter username and password");
       return;
     }
 
@@ -36,6 +36,10 @@ function Login() {
       console.log("LOGIN RESPONSE:", data);
 
       if (response.ok) {
+        // ✅ SAVE TOKEN (MOST IMPORTANT)
+        localStorage.setItem("token", data.access);
+
+        // ✅ SAVE USER
         localStorage.setItem("user", JSON.stringify(data));
 
         const role = data.role?.toLowerCase();
@@ -43,23 +47,23 @@ function Login() {
         if (role === "admin") navigate("/dashboard");
         else if (role === "teacher") navigate("/teacher");
         else if (role === "student") navigate("/student");
-        else setError("Invalid role from server");
-
+        else setError("Invalid role");
       } else {
-        setError(data.error || "Invalid username or password.");
+        setError(data.error || "Invalid credentials");
       }
-
     } catch (err) {
       console.log(err);
-      setError("Unable to connect to the server.");
+      setError("Server error");
     }
 
     setLoading(false);
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === "Enter") handleLogin();
-  };
+  if (e.key === "Enter") {
+    handleLogin();
+  }
+};
   return (
     <div style={styles.page}>
       <div style={styles.wrapper}>

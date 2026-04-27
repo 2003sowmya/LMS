@@ -1,24 +1,53 @@
 from rest_framework.routers import DefaultRouter
-from django.urls import path
+from django.urls import path, include
 from .views import (
     CourseViewSet,
     EnrollmentViewSet,
     AssignmentViewSet,
+    SubmissionViewSet,
     LectureViewSet,
-    admin_dashboard
+    NoteViewSet,
+    LiveSessionViewSet,
+    NotificationViewSet,
+    QuizViewSet,
+    QuestionViewSet,
+    QuizAttemptViewSet,
+    MarkViewSet,
+    admin_dashboard,
+    teacher_dashboard,
+    teacher_students,
+    download_marksheet,
+    serve_note_file,
 )
 
 router = DefaultRouter()
 
-# ================= ROUTES =================
+# ✅ FIXED: courses should NOT be root
 router.register(r'courses', CourseViewSet, basename='course')
-router.register(r'enrollments', EnrollmentViewSet, basename='enrollment')
-router.register(r'assignments', AssignmentViewSet, basename='assignment')  # ✅ added
-router.register(r'lectures', LectureViewSet, basename='lecture')           # ✅ added
 
-# ================= URLPATTERNS =================
+# ✅ Other routes (these will now work correctly)
+router.register(r'enrollments', EnrollmentViewSet)
+router.register(r'assignments', AssignmentViewSet)
+router.register(r'submissions', SubmissionViewSet)
+router.register(r'lectures', LectureViewSet)
+router.register(r'notes', NoteViewSet)
+router.register(r'live-sessions', LiveSessionViewSet)
+router.register(r'notifications', NotificationViewSet, basename='notification')
+router.register(r'quizzes', QuizViewSet)
+router.register(r'questions', QuestionViewSet)
+router.register(r'quiz-attempts', QuizAttemptViewSet)
+router.register(r'marks', MarkViewSet)
+
 urlpatterns = [
-    path('admin-dashboard/', admin_dashboard, name='admin-dashboard'),
-]
+    # ✅ Dashboard APIs
+    path('admin-dashboard/', admin_dashboard),
+    path('teacher-dashboard/', teacher_dashboard),
+    path('teacher-students/', teacher_students),
+    path('download-marksheet/', download_marksheet),
 
-urlpatterns += router.urls
+    # ✅ File serving
+    path('notes/file/<int:pk>/', serve_note_file),
+
+    # ✅ Include router URLs
+    path('', include(router.urls)),
+]
