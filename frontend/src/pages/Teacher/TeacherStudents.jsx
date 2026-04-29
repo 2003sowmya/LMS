@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import API from "../../api";
 import Sidebar from "../../components/Sidebar";
 import Navbar from "../../components/Navbar";
+import "../../App.css";
 
 export default function TeacherStudents() {
   const [students, setStudents] = useState([]);
@@ -12,8 +13,12 @@ export default function TeacherStudents() {
 
   const fetchStudents = async () => {
     try {
-      const res = await API.get("/teacher-students/");
-      setStudents(res.data);
+      // ✅ FIXED URL
+      const res = await API.get("/teacher/students/");
+
+      const data = res.data?.results || res.data;
+
+      setStudents(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("Error fetching students:", err);
     }
@@ -27,36 +32,45 @@ export default function TeacherStudents() {
         <Navbar />
 
         <div className="content">
-          {/* HEADER */}
+
+          {/* ===== HEADER ===== */}
           <div className="header-box">
             <h2>My Students</h2>
             <p>Students enrolled in your courses</p>
           </div>
 
-          {/* TABLE */}
+          {/* ===== CARD ===== */}
           <div className="card">
-            {students.length === 0 ? (
-              <p>No students found</p>
-            ) : (
-              <table className="styled-table">
-                <thead>
-                  <tr>
-                    <th>Student Name</th>
-                    <th>Email</th>
-                    <th>Course</th>
-                  </tr>
-                </thead>
+            <h3 style={{ marginBottom: 15 }}>Student List</h3>
 
-                <tbody>
-                  {students.map((s, index) => (
-                    <tr key={index}>
-                      <td>{s.student_name}</td>
-                      <td>{s.student_email}</td>
-                      <td>{s.course_title}</td>
+            {students.length === 0 ? (
+              <p style={{ textAlign: "center" }}>
+                No students found
+              </p>
+            ) : (
+              <div className="table-container">
+                <table className="styled-table">
+                  <thead>
+                    <tr>
+                      <th>Student Name</th>
+                      <th>Email</th>
+                      <th>Course</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+
+                  <tbody>
+                    {students.map((s, index) => (
+                      <tr key={index}>
+                        {/* ✅ FIXED FIELD NAMES */}
+                        <td>{s.student_name}</td>
+                        <td>{s.email}</td>
+                        <td>{s.course}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+
+                </table>
+              </div>
             )}
           </div>
 

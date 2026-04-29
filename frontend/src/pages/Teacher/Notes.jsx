@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import API from "../../api";
 import Sidebar from "../../components/Sidebar";
 import Navbar from "../../components/Navbar";
+import "../../App.css";
 
 function NotesPage({ courses }) {
   const [notes, setNotes] = useState([]);
@@ -9,9 +10,6 @@ function NotesPage({ courses }) {
 
   const [form, setForm] = useState({
     title: "",
-    course_id: "",
-    chapter: "",
-    description: "",
     file: null,
   });
 
@@ -26,7 +24,8 @@ function NotesPage({ courses }) {
   const fetchNotes = async () => {
     try {
       const res = await API.get("/notes/");
-      setNotes(res.data);
+      const data = res.data?.results || res.data;
+      setNotes(Array.isArray(data) ? data : []);
     } catch (err) {
       console.log(err);
     }
@@ -49,16 +48,12 @@ function NotesPage({ courses }) {
 
     try {
       await API.post("/notes/", fd);
-      notify("Uploaded!");
+      notify("Uploaded successfully!");
       setShowForm(false);
       fetchNotes();
 
-      // reset form
       setForm({
         title: "",
-        course_id: "",
-        chapter: "",
-        description: "",
         file: null,
       });
 
@@ -69,64 +64,109 @@ function NotesPage({ courses }) {
   };
 
   return (
-    <div>
+    <>
+      {/* ===== HEADER ===== */}
+      <div className="header-box">
+        <h2>Notes</h2>
+        <p>Manage your study materials</p>
+      </div>
 
-      {/* Toast */}
-      {toast && <div>{toast.msg}</div>}
+      {/* ===== BUTTON ===== */}
+      <div style={{ textAlign: "center", marginBottom: 20 }}>
+        <button
+          className="btn-primary"
+          onClick={() => setShowForm(!showForm)}
+        >
+          {showForm ? "Cancel" : "+ Upload Notes"}
+        </button>
+      </div>
 
-      <h2>Notes</h2>
-
-      {/* Toggle */}
-      <button onClick={() => setShowForm(!showForm)}>
-        {showForm ? "Cancel" : "Upload Notes"}
-      </button>
-
-      {/* ================= FORM ================= */}
+      {/* ===== FORM ===== */}
       {showForm && (
-        <div>
-          <input
-            placeholder="Title"
-            value={form.title}
-            onChange={(e) => setForm({ ...form, title: e.target.value })}
-          />
+        <div className="card">
+          <div className="form-grid">
 
-          <input
-            type="file"
-            onChange={(e) => setForm({ ...form, file: e.target.files[0] })}
-          />
+            <input
+              placeholder="Title"
+              value={form.title}
+              onChange={(e) =>
+                setForm({ ...form, title: e.target.value })
+              }
+            />
 
-          <button onClick={handleUpload}>Upload</button>
+            <input
+              type="file"
+              onChange={(e) =>
+                setForm({ ...form, file: e.target.files[0] })
+              }
+            />
+
+          </div>
+
+          <div style={{ marginTop: 15 }}>
+            <button className="btn-primary" onClick={handleUpload}>
+              Upload
+            </button>
+          </div>
         </div>
       )}
 
-      {/* ================= LIST ================= */}
-      <h3>All Notes</h3>
+      {/* ===== LIST ===== */}
+      <div className="card">
+        <h3 style={{ marginBottom: 15 }}>All Notes</h3>
 
-      {notes.length === 0 ? (
-        <p>No notes available</p>
-      ) : (
-        notes.map((n) => (
-          <div key={n.id} style={{ marginBottom: 10 }}>
-            
-            <strong>{n.title}</strong>
+        {notes.length === 0 ? (
+          <p style={{ textAlign: "center" }}>
+            No notes available
+          </p>
+        ) : (
+          <div className="table-container">
+            <table className="styled-table">
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>File</th>
+                </tr>
+              </thead>
 
-            {/* ✅ THIS IS THE IMPORTANT FIX */}
-            {n.file && (
-              <div>
-                <a
-                  href= {n.file}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  📄 View File
-                </a>
-              </div>
-            )}
+              <tbody>
+                {notes.map((n) => (
+                  <tr key={n.id}>
+                    <td>{n.title}</td>
 
+                    <td>
+                      {n.file && (
+                        <a
+                          href={n.file}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="btn-primary"
+                          style={{
+                            padding: "6px 10px",
+                            fontSize: "12px",
+                            textDecoration: "none",
+                          }}
+                        >
+                          View File
+                        </a>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+
+            </table>
           </div>
-        ))
+        )}
+      </div>
+
+      {/* ===== TOAST ===== */}
+      {toast && (
+        <div className="toast">
+          {toast.msg}
+        </div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -141,11 +181,15 @@ function Notes() {
   }, []);
 
   return (
-    <div className="main">
+    <div className="layout">
       <Sidebar />
-      <div className="content">
+
+      <div className="main">
         <Navbar />
-        <NotesPage courses={courses} />
+
+        <div className="content">
+          <NotesPage courses={courses} />
+        </div>
       </div>
     </div>
   );

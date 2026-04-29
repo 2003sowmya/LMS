@@ -14,30 +14,30 @@ from .models import (
     Mark
 )
 
-
 # ===================== COURSE =====================
 class CourseSerializer(serializers.ModelSerializer):
     teacher_name = serializers.CharField(source='teacher.username', read_only=True)
     teacher_dept = serializers.CharField(source='teacher.department', read_only=True)
 
-    # ✅ ADDED: student count
     student_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Course
         fields = [
             'id',
+            'course_code',   # ✅ SUBJECT CODE
             'title',
             'description',
+            'department',
             'teacher',
             'teacher_name',
             'teacher_dept',
             'created_at',
-            'student_count'   # ✅ included
+            'student_count'
         ]
 
     def get_student_count(self, obj):
-        return Enrollment.objects.filter(course=obj).count()
+        return obj.enrollments.count()
 
 
 # ===================== ENROLLMENT =====================
@@ -49,17 +49,25 @@ class EnrollmentSerializer(serializers.ModelSerializer):
     course_title = serializers.CharField(source='course.title', read_only=True)
     course_teacher = serializers.CharField(source='course.teacher.username', read_only=True)
 
+    # ✅ FINAL FIX HERE
+    student_id = serializers.CharField(source='student.roll_number', read_only=True)
+    course_id = serializers.CharField(source='course.course_code', read_only=True)
+
     class Meta:
         model = Enrollment
         fields = [
             'id',
             'student',
+            'student_id',
             'student_name',
             'student_dept',
             'student_roll',
+
             'course',
+            'course_id',   # ✅ now shows CS001
             'course_title',
             'course_teacher',
+
             'enrolled_at'
         ]
 

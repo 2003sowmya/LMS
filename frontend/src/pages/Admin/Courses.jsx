@@ -12,6 +12,7 @@ export default function Courses() {
   const [form, setForm] = useState({
     title: "",
     description: "",
+    course_code: "",   // ✅ ADDED
     teacher: ""
   });
 
@@ -23,12 +24,13 @@ export default function Courses() {
     fetchTeachers();
   }, []);
 
+  // ===== TOAST =====
   const showToast = (msg) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3000);
   };
 
-  // ================= FETCH =================
+  // ===== FETCH =====
   const fetchCourses = async () => {
     try {
       const res = await API.get("/courses/");
@@ -50,22 +52,22 @@ export default function Courses() {
     }
   };
 
-  // ================= INPUT =================
+  // ===== INPUT =====
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  // ================= ADD COURSE =================
+  // ===== ADD COURSE =====
   const handleAddCourse = async () => {
-    if (!form.title || !form.description) {
-      return showToast("⚠️ Enter title & description");
+    if (!form.title || !form.description || !form.course_code) {
+      return showToast("⚠️ Enter all fields");
     }
 
     try {
       await API.post("/courses/", {
         title: form.title,
-        description: form.description
-        // ✅ NO teacher here
+        description: form.description,
+        course_code: form.course_code   // ✅ ADDED
       });
 
       showToast("✅ Course created");
@@ -77,7 +79,42 @@ export default function Courses() {
     }
   };
 
-  // ================= ASSIGN TEACHER =================
+  // ===== EDIT COURSE =====
+  const handleEditCourse = (course) => {
+    setForm({
+      title: course.title,
+      description: course.description,
+      course_code: course.course_code || "", // ✅ ADDED
+      teacher: ""
+    });
+
+    setEditingId(course.id);
+    setAssignMode(false);
+  };
+
+  // ===== UPDATE COURSE =====
+  const handleUpdateCourse = async () => {
+    if (!form.title || !form.description || !form.course_code) {
+      return showToast("⚠️ Enter all fields");
+    }
+
+    try {
+      await API.put(`/courses/${editingId}/`, {
+        title: form.title,
+        description: form.description,
+        course_code: form.course_code   // ✅ ADDED
+      });
+
+      showToast("✅ Course updated");
+      resetForm();
+      fetchCourses();
+    } catch (err) {
+      console.log(err.response?.data);
+      showToast("❌ Failed to update");
+    }
+  };
+
+  // ===== ASSIGN TEACHER =====
   const handleAssignTeacher = async () => {
     if (!form.teacher) return showToast("⚠️ Select teacher");
 
@@ -95,7 +132,7 @@ export default function Courses() {
     }
   };
 
-  // ================= DELETE =================
+  // ===== DELETE =====
   const handleDelete = async (id) => {
     if (!window.confirm("Delete course?")) return;
 
@@ -108,15 +145,15 @@ export default function Courses() {
     }
   };
 
-  // ================= MODE =================
+  // ===== MODE SWITCH =====
   const handleAssignClick = (course) => {
     setEditingId(course.id);
     setAssignMode(true);
-    setForm({ title: "", description: "", teacher: "" });
+    setForm({ title: "", description: "", course_code: "", teacher: "" });
   };
 
   const resetForm = () => {
-    setForm({ title: "", description: "", teacher: "" });
+    setForm({ title: "", description: "", course_code: "", teacher: "" });
     setEditingId(null);
     setAssignMode(false);
   };
@@ -129,7 +166,11 @@ export default function Courses() {
         <Navbar />
 
         <div className="content">
-          <h1>Course Management</h1>
+
+          {/* HEADER */}
+          <div className="header-box">
+            <h2>Course Management</h2>
+          </div>
 
           {/* FORM */}
           <div className="card">
@@ -137,6 +178,14 @@ export default function Courses() {
 
               {!assignMode && (
                 <>
+                  {/* ✅ SUBJECT CODE */}
+                  <input
+                    name="course_code"
+                    placeholder="Subject Code (e.g CS201)"
+                    value={form.course_code}
+                    onChange={handleChange}
+                  />
+
                   <input
                     name="title"
                     placeholder="Course Title"
@@ -151,8 +200,11 @@ export default function Courses() {
                     onChange={handleChange}
                   />
 
-                  <button onClick={handleAddCourse}>
-                    Add Course
+                  <button
+                    className="btn-primary"
+                    onClick={editingId ? handleUpdateCourse : handleAddCourse}
+                  >
+                    {editingId ? "Update Course" : "Add Course"}
                   </button>
                 </>
               )}
@@ -172,15 +224,24 @@ export default function Courses() {
                     ))}
                   </select>
 
-                  <button onClick={handleAssignTeacher}>
+                  <button
+                    className="btn-edit"
+                    onClick={handleAssignTeacher}
+                  >
                     Assign Teacher
                   </button>
                 </>
               )}
 
               {editingId && (
-                <button onClick={resetForm}>Cancel</button>
+                <button
+                  className="btn-secondary"
+                  onClick={resetForm}
+                >
+                  Cancel
+                </button>
               )}
+
             </div>
           </div>
 
@@ -189,6 +250,7 @@ export default function Courses() {
             <table>
               <thead>
                 <tr>
+                  <th>Code</th> {/* ✅ ADDED */}
                   <th>Course</th>
                   <th>Description</th>
                   <th>Teacher</th>
@@ -199,21 +261,35 @@ export default function Courses() {
               <tbody>
                 {courses.length === 0 ? (
                   <tr>
-                    <td colSpan="4">No courses</td>
+                    <td colSpan="5">No courses available</td>
                   </tr>
                 ) : (
                   courses.map((c) => (
                     <tr key={c.id}>
+                      <td>{c.course_code}</td> {/* ✅ ADDED */}
                       <td>{c.title}</td>
                       <td>{c.description}</td>
                       <td>{c.teacher_name || "Not Assigned"}</td>
 
                       <td>
-                        <button onClick={() => handleAssignClick(c)}>
+                        <button
+                          className="btn-edit"
+                          onClick={() => handleEditCourse(c)}
+                        >
+                          Edit
+                        </button>
+
+                        <button
+                          className="btn-edit"
+                          onClick={() => handleAssignClick(c)}
+                        >
                           Assign Teacher
                         </button>
 
-                        <button onClick={() => handleDelete(c.id)}>
+                        <button
+                          className="btn-delete"
+                          onClick={() => handleDelete(c.id)}
+                        >
                           Delete
                         </button>
                       </td>
@@ -227,6 +303,7 @@ export default function Courses() {
         </div>
       </div>
 
+      {/* TOAST */}
       {toast && <div className="toast">{toast}</div>}
     </div>
   );

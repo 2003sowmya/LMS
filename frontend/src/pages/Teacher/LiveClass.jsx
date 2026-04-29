@@ -2,20 +2,7 @@ import React, { useState, useEffect } from "react";
 import API from "../../api";
 import Sidebar from "../../components/Sidebar";
 import Navbar from "../../components/Navbar";
-
-const S = {
-  pageHeader: {},
-  pageTitle: {},
-  card: {},
-  cardTitle: {},
-  formRow: {},
-  formGroup: {},
-  label: {},
-  input: {},
-  select: {},
-  textarea: {},
-  btnPrimary: {},
-};
+import "../../App.css";
 
 function LiveClassPage({ courses }) {
   const [form, setForm] = useState({
@@ -32,28 +19,31 @@ function LiveClassPage({ courses }) {
   const [showForm, setShowForm] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState(null);
-  const [activeTab, setActiveTab] = useState("upcoming");
-  const [reminder, setReminder] = useState(true);
 
-  const notify = (msg, type = "success") => {
-    setToast({ msg, type });
+  const notify = (msg) => {
+    setToast(msg);
     setTimeout(() => setToast(null), 3000);
   };
 
+  // ===== FETCH =====
   const fetchSessions = async () => {
     try {
       const res = await API.get("/live-sessions/");
-      setSessions(res.data);
-    } catch {}
+      const data = res.data?.results || res.data;
+      setSessions(Array.isArray(data) ? data : []);
+    } catch {
+      notify("Failed to load sessions");
+    }
   };
 
   useEffect(() => {
     fetchSessions();
   }, []);
 
+  // ===== SCHEDULE =====
   const handleSchedule = async () => {
     if (!form.title || !form.date || !form.meeting_link) {
-      notify("Title, date and meeting link are required", "error");
+      notify("Title, date & meeting link required");
       return;
     }
 
@@ -68,7 +58,6 @@ function LiveClassPage({ courses }) {
         duration: form.duration,
         meeting_link: form.meeting_link,
         agenda: form.agenda,
-        send_reminder: reminder,
       });
 
       notify("Session scheduled!");
@@ -86,70 +75,149 @@ function LiveClassPage({ courses }) {
 
       fetchSessions();
     } catch {
-      notify("Failed to schedule", "error");
+      notify("Failed to schedule");
     } finally {
       setUploading(false);
     }
   };
 
   return (
-    <div>
-      {toast && <div>{toast.msg}</div>}
+    <>
+      {/* ===== HEADER ===== */}
+      <div className="header-box">
+        <h2>Live Classes</h2>
+        <p>{sessions.length} sessions scheduled</p>
+      </div>
 
-      <h2>Live Classes</h2>
+      {/* ===== BUTTON ===== */}
+      <div style={{ textAlign: "center", marginBottom: 20 }}>
+        <button
+          className="btn-primary"
+          onClick={() => setShowForm(!showForm)}
+        >
+          {showForm ? "Cancel" : "+ Schedule Class"}
+        </button>
+      </div>
 
-      <button onClick={() => setShowForm(!showForm)}>
-        {showForm ? "Cancel" : "Schedule"}
-      </button>
-
+      {/* ===== FORM ===== */}
       {showForm && (
-        <div>
-          <input
-            placeholder="Title"
-            value={form.title}
-            onChange={(e) => setForm({ ...form, title: e.target.value })}
-          />
+        <div className="card">
+          <div className="form-grid">
 
-          <input
-            type="date"
-            value={form.date}
-            onChange={(e) => setForm({ ...form, date: e.target.value })}
-          />
+            <input
+              placeholder="Title"
+              value={form.title}
+              onChange={(e) =>
+                setForm({ ...form, title: e.target.value })
+              }
+            />
 
-          <input
-            placeholder="Meeting Link"
-            value={form.meeting_link}
-            onChange={(e) =>
-              setForm({ ...form, meeting_link: e.target.value })
-            }
-          />
+            <input
+              type="date"
+              value={form.date}
+              onChange={(e) =>
+                setForm({ ...form, date: e.target.value })
+              }
+            />
 
-          <button onClick={handleSchedule}>
-            {uploading ? "Scheduling..." : "Schedule"}
-          </button>
+            <input
+              type="time"
+              value={form.time}
+              onChange={(e) =>
+                setForm({ ...form, time: e.target.value })
+              }
+            />
+
+            <input
+              placeholder="Meeting Link"
+              value={form.meeting_link}
+              onChange={(e) =>
+                setForm({ ...form, meeting_link: e.target.value })
+              }
+            />
+
+          </div>
+
+          <div style={{ marginTop: 15 }}>
+            <button className="btn-primary" onClick={handleSchedule}>
+              {uploading ? "Scheduling..." : "Schedule"}
+            </button>
+          </div>
         </div>
       )}
 
-      <h3>Sessions</h3>
+      {/* ===== SESSIONS LIST ===== */}
+      <div className="card">
+        <h3 style={{ marginBottom: 15 }}>All Sessions</h3>
 
-      {sessions.map((s) => (
-        <div key={s.id}>
-          {s.title} - {s.date}
-        </div>
-      ))}
-    </div>
+        {sessions.length === 0 ? (
+          <p style={{ textAlign: "center" }}>No sessions available</p>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Date</th>
+                <th>Time</th>
+                <th>Join</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {sessions.map((s) => (
+                <tr key={s.id}>
+                  <td>{s.title}</td>
+                  <td>{s.date}</td>
+                  <td>{s.time || "-"}</td>
+
+                  <td>
+                    <a
+                      href={s.meeting_link}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn-primary"
+                      style={{
+                        padding: "6px 10px",
+                        fontSize: "12px",
+                        textDecoration: "none",
+                      }}
+                    >
+                      Join
+                    </a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* ===== TOAST ===== */}
+      {toast && <div className="toast">{toast}</div>}
+    </>
   );
 }
 
-// ✅ FIXED WRAPPER WITH LAYOUT
+// ===== WRAPPER =====
 function LiveClass() {
+  const [courses, setCourses] = useState([]);
+
+  useEffect(() => {
+    API.get("/courses/")
+      .then((res) => setCourses(res.data))
+      .catch(() => {});
+  }, []);
+
   return (
-    <div className="main">
+    <div className="layout">
       <Sidebar />
 
-      <div className="content">
+      <div className="main">
         <Navbar />
-        <LiveClassPage courses={[]} />
+
+        <div className="content">
+          <LiveClassPage courses={courses} />
+        </div>
       </div>
     </div>
   );

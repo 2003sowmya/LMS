@@ -34,14 +34,16 @@ export default function Users() {
 
   // ✅ FETCH USERS
   const fetchUsers = async () => {
-    try {
-      const res = await API.get("users/");
-      setUsers(res.data);
-    } catch {
-      showToast("❌ Failed to load users");
-    }
-  };
+  try {
+    const res = await API.get("users/");
 
+    const data = res.data?.results || res.data;
+
+    setUsers(Array.isArray(data) ? data : []);
+  } catch {
+    showToast("❌ Failed to load users");
+  }
+};
   // ✅ DELETE USER
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this user?")) return;
@@ -130,7 +132,7 @@ export default function Users() {
         <Navbar />
 
         <div className="content">
-          <h1>User Management</h1>
+          <h2>User Management</h2>
 
           {/* FILTERS */}
           <div className="top-filters">

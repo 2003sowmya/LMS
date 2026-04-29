@@ -1,71 +1,29 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import Sidebar from "../../components/Sidebar";   // ✅ FIXED
-import Navbar from "../../components/Navbar";     // ✅ FIXED
-import API from "../../api";                      // ✅ FIXED
+import Sidebar from "../../components/Sidebar";
+import Navbar from "../../components/Navbar";
+import API from "../../api";
+import "../../App.css"; // ✅ keep global layout styles
 
-function Lectures() {
+export default function Lectures() {
   const navigate = useNavigate();
   const user = JSON.parse(localStorage.getItem("user"));
 
   const [lectures, setLectures] = useState([]);
-  const [showForm, setShowForm] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [activeTab, setActiveTab] = useState("all");
-
-  const [form, setForm] = useState({
-    title: "",
-    description: "",
-    lecture_type: "recorded",
-    video_file: null,
-    meeting_link: "",
-    scheduled_at: "",
-  });
 
   useEffect(() => {
     if (!user) navigate("/");
+    fetchLectures();
   }, []);
 
   const fetchLectures = async () => {
     try {
       const res = await API.get("/lectures/");
-      setLectures(res.data);
+      const data = res.data?.results || res.data;
+      setLectures(Array.isArray(data) ? data : []);
     } catch {
       console.log("Error loading lectures");
-    }
-  };
-
-  useEffect(() => {
-    fetchLectures();
-  }, []);
-
-  const handleSubmit = async () => {
-    if (!form.title) return;
-
-    setUploading(true);
-
-    const formData = new FormData();
-    formData.append("title", form.title);
-    formData.append("description", form.description);
-    formData.append("lecture_type", form.lecture_type);
-
-    if (form.lecture_type === "recorded" && form.video_file) {
-      formData.append("video_file", form.video_file);
-    }
-
-    if (form.lecture_type === "live") {
-      formData.append("meeting_link", form.meeting_link);
-      formData.append("scheduled_at", form.scheduled_at);
-    }
-
-    try {
-      await API.post("/lectures/", formData);
-      setShowForm(false);
-      fetchLectures();
-    } catch {
-      console.log("Upload failed");
-    } finally {
-      setUploading(false);
     }
   };
 
@@ -75,91 +33,130 @@ function Lectures() {
     fetchLectures();
   };
 
+  const getVideoUrl = (url) => {
+    if (!url) return null;
+    return url.startsWith("http")
+      ? url
+      : `http://127.0.0.1:8000${url}`;
+  };
+
   const filtered = lectures.filter((l) =>
     activeTab === "all" ? true : l.lecture_type === activeTab
   );
 
-  const canUpload = user?.role === "admin" || user?.role === "teacher";
-
   return (
-    <div className="main"> {/* ✅ IMPORTANT */}
-      <Sidebar /> {/* ✅ ADDED */}
+    <div className="layout">
 
-      <div className="content"> {/* ✅ IMPORTANT */}
+      {/* ✅ INTERNAL CSS (only lecture UI) */}
+      <style>{`
+        .lectureCard {
+          background: #ffffff;
+          padding: 18px;
+          border-radius: 14px;
+          box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+          margin-top: 20px;
+        }
+
+        .lectureRow {
+          display: flex;
+          align-items: center;
+          gap: 15px;
+        }
+
+        .lectureTitle {
+          flex: 1;
+          font-size: 18px;
+          font-weight: 600;
+        }
+
+        .lectureBadge {
+          padding: 4px 10px;
+          border-radius: 10px;
+          font-size: 12px;
+          font-weight: bold;
+          text-transform: capitalize;
+        }
+
+        .lectureBadge.recorded {
+          background: #e0f2fe;
+          color: #0284c7;
+        }
+
+        .lectureBadge.live {
+          background: #fee2e2;
+          color: #dc2626;
+        }
+
+        .watchBtn {
+          background: #4f46e5;
+          color: white;
+          padding: 6px 12px;
+          border-radius: 6px;
+          border: none;
+          cursor: pointer;
+        }
+
+        .watchBtn:hover {
+          opacity: 0.9;
+        }
+
+        .deleteBtn {
+          background: #ef4444;
+          color: white;
+          padding: 6px 12px;
+          border-radius: 6px;
+          border: none;
+          cursor: pointer;
+        }
+
+        .deleteBtn:hover {
+          opacity: 0.9;
+        }
+
+        .lectureTabs {
+          text-align: center;
+          margin: 20px 0;
+        }
+
+        .tabBtn {
+          margin: 5px;
+          padding: 6px 12px;
+          background: #ddd;
+          border-radius: 6px;
+          border: none;
+          cursor: pointer;
+        }
+
+        .tabActive {
+          background: #4f46e5;
+          color: white;
+        }
+
+        .lectureEmpty {
+          text-align: center;
+          margin-top: 30px;
+        }
+      `}</style>
+
+      <Sidebar />
+
+      <div className="main">
         <Navbar />
 
-        <div style={styles.page}>
-          {/* HEADER */}
-          <div style={styles.header}>
-            <div>
-              <h2>Lectures</h2>
-              <p>{lectures.length} total lectures</p>
-            </div>
+        <div className="content">
 
-            {canUpload && (
-              <button style={styles.primaryBtn} onClick={() => setShowForm(!showForm)}>
-                {showForm ? "Cancel" : "+ Add Lecture"}
-              </button>
-            )}
+          {/* HEADER */}
+          <div className="header-box">
+            <h2>Lectures</h2>
+            <p>{lectures.length} total lectures</p>
           </div>
 
-          {/* FORM */}
-          {showForm && (
-            <div style={styles.formCard}>
-              <input
-                placeholder="Title"
-                value={form.title}
-                onChange={(e) => setForm({ ...form, title: e.target.value })}
-              />
-
-              <select
-                value={form.lecture_type}
-                onChange={(e) =>
-                  setForm({ ...form, lecture_type: e.target.value })
-                }
-              >
-                <option value="recorded">Recorded</option>
-                <option value="live">Live</option>
-              </select>
-
-              {form.lecture_type === "recorded" && (
-                <input
-                  type="file"
-                  onChange={(e) =>
-                    setForm({ ...form, video_file: e.target.files[0] })
-                  }
-                />
-              )}
-
-              {form.lecture_type === "live" && (
-                <>
-                  <input
-                    placeholder="Meeting link"
-                    onChange={(e) =>
-                      setForm({ ...form, meeting_link: e.target.value })
-                    }
-                  />
-                  <input
-                    type="datetime-local"
-                    onChange={(e) =>
-                      setForm({ ...form, scheduled_at: e.target.value })
-                    }
-                  />
-                </>
-              )}
-
-              <button onClick={handleSubmit}>
-                {uploading ? "Uploading..." : "Save"}
-              </button>
-            </div>
-          )}
-
-          {/* TABS */}
-          <div style={styles.tabs}>
+          {/* FILTER */}
+          <div className="lectureTabs">
             {["all", "recorded", "live"].map((tab) => (
               <button
                 key={tab}
-                style={activeTab === tab ? styles.activeTab : styles.tab}
+                className={activeTab === tab ? "tabActive" : "tabBtn"}
                 onClick={() => setActiveTab(tab)}
               >
                 {tab}
@@ -167,102 +164,60 @@ function Lectures() {
             ))}
           </div>
 
-          {/* EMPTY STATE */}
+          {/* LIST */}
           {filtered.length === 0 ? (
-            <div style={styles.empty}>
-              <div style={{ fontSize: 50 }}>📚</div>
+            <div className="lectureEmpty">
               <h3>No lectures yet</h3>
-              <p>Add lectures to see them here</p>
             </div>
           ) : (
-            <div style={styles.grid}>
-              {filtered.map((l) => (
-                <div key={l.id} style={styles.card}>
-                  <h3>{l.title}</h3>
+            filtered.map((l) => (
+              <div key={l.id} className="lectureCard">
 
-                  {l.lecture_type === "recorded" && (
-                    <a href={`http://127.0.0.1:8000${l.video_file}`} target="_blank">
+                <div className="lectureRow">
+
+                  <div className="lectureTitle">{l.title}</div>
+
+                  <span className={`lectureBadge ${l.lecture_type}`}>
+                    {l.lecture_type}
+                  </span>
+
+                  {l.lecture_type === "recorded" && l.video_file && (
+                    <button
+                      className="watchBtn"
+                      onClick={() =>
+                        window.open(getVideoUrl(l.video_file), "_blank")
+                      }
+                    >
                       ▶ Watch
-                    </a>
+                    </button>
                   )}
 
                   {l.lecture_type === "live" && (
-                    <a href={l.meeting_link} target="_blank">
-                      Join Live
+                    <a
+                      href={l.meeting_link}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="watchBtn"
+                    >
+                      🔴 Join
                     </a>
                   )}
 
-                  {canUpload && (
-                    <button onClick={() => deleteLecture(l.id)}>Delete</button>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                  <button
+                    className="deleteBtn"
+                    onClick={() => deleteLecture(l.id)}
+                  >
+                    Delete
+                  </button>
 
+                </div>
+
+              </div>
+            ))
+          )}
+
+        </div>
       </div>
     </div>
   );
 }
-
-const styles = {
-  page: {
-    padding: "30px",
-    background: "#f1f5f9",
-    minHeight: "100vh",
-  },
-  header: {
-    display: "flex",
-    justifyContent: "space-between",
-    marginBottom: "20px",
-  },
-  primaryBtn: {
-    background: "#2563eb",
-    color: "#fff",
-    padding: "10px 16px",
-    border: "none",
-    borderRadius: "8px",
-    cursor: "pointer",
-  },
-  formCard: {
-    background: "#fff",
-    padding: "20px",
-    borderRadius: "10px",
-    marginBottom: "20px",
-  },
-  tabs: {
-    display: "flex",
-    gap: "10px",
-    marginBottom: "20px",
-  },
-  tab: {
-    padding: "6px 12px",
-    background: "#e2e8f0",
-    border: "none",
-  },
-  activeTab: {
-    padding: "6px 12px",
-    background: "#2563eb",
-    color: "#fff",
-    border: "none",
-  },
-  empty: {
-    textAlign: "center",
-    marginTop: "80px",
-    color: "#64748b",
-  },
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill,minmax(250px,1fr))",
-    gap: "20px",
-  },
-  card: {
-    background: "#fff",
-    padding: "16px",
-    borderRadius: "10px",
-    boxShadow: "0 4px 10px rgba(0,0,0,0.08)",
-  },
-};
-
-export default Lectures;

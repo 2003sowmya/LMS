@@ -11,53 +11,61 @@ function Login() {
   const navigate = useNavigate();
 
   const handleLogin = async () => {
-    setError("");
+  setError("");
 
-    if (!username || !password) {
-      setError("Please enter username and password");
-      return;
-    }
+  if (!username || !password) {
+    setError("Please enter username and password");
+    return;
+  }
 
-    setLoading(true);
+  setLoading(true);
 
-    try {
-      const response = await fetch(
-        "http://127.0.0.1:8000/api/users/login/",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ username, password }),
-        }
-      );
-
-      const data = await response.json();
-      console.log("LOGIN RESPONSE:", data);
-
-      if (response.ok) {
-        // ✅ SAVE TOKEN (MOST IMPORTANT)
-        localStorage.setItem("token", data.access);
-
-        // ✅ SAVE USER
-        localStorage.setItem("user", JSON.stringify(data));
-
-        const role = data.role?.toLowerCase();
-
-        if (role === "admin") navigate("/dashboard");
-        else if (role === "teacher") navigate("/teacher");
-        else if (role === "student") navigate("/student");
-        else setError("Invalid role");
-      } else {
-        setError(data.error || "Invalid credentials");
+  try {
+    const response = await fetch(
+      "http://127.0.0.1:8000/api/users/login/",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ username, password }),
       }
-    } catch (err) {
-      console.log(err);
-      setError("Server error");
+    );
+
+    const data = await response.json();
+    console.log("LOGIN RESPONSE:", data);
+
+    if (response.ok) {
+      // ✅ SAVE TOKEN
+      localStorage.setItem("token", data.access);
+      localStorage.setItem("user", JSON.stringify(data));
+
+      const role = (data.role || "").toLowerCase();
+
+      if (data.is_superuser === true || role === "admin") {
+        navigate("/dashboard");   // ADMIN
+      } 
+      else if (role === "teacher") {
+        navigate("/teacher");     // TEACHER
+      } 
+      else if (role === "student") {
+        navigate("/student");     // STUDENT
+      } 
+      else {
+        console.log("Unknown role:", data);
+        setError("Invalid role");
+      }
+    } else {
+      setError(data.error || "Invalid credentials");
     }
 
-    setLoading(false);
-  };
+  } catch (err) {
+    console.log(err);
+    setError("Server error");
+  }
+
+  setLoading(false);
+};
 
   const handleKeyDown = (e) => {
   if (e.key === "Enter") {

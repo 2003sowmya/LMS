@@ -20,10 +20,9 @@ export default function Enrollments() {
     fetchCourses();
   }, []);
 
-  // ================= FETCH =================
   const fetchEnrollments = async () => {
     try {
-      const res = await API.get("/enrollments/"); // ✅ FIXED
+      const res = await API.get("/enrollments/");
       const data = res.data?.results || res.data;
       setEnrollments(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -52,7 +51,6 @@ export default function Enrollments() {
     }
   };
 
-  // ================= HANDLE =================
   const handleChange = (e) => {
     setForm({
       ...form,
@@ -60,12 +58,16 @@ export default function Enrollments() {
     });
   };
 
-  // ================= SUBMIT =================
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    if (!form.student || !form.course) {
+      alert("Please select both student and course");
+      return;
+    }
+
     try {
-      await API.post("/enrollments/", { // ✅ FIXED
+      await API.post("/enrollments/", {
         student: Number(form.student),
         course: Number(form.course)
       });
@@ -73,7 +75,7 @@ export default function Enrollments() {
       setForm({ student: "", course: "" });
       fetchEnrollments();
 
-      alert("Enrollment successful ✅");
+      alert("✅ Enrollment successful");
     } catch (err) {
       console.error(err);
 
@@ -85,17 +87,17 @@ export default function Enrollments() {
     }
   };
 
-  // ================= DELETE =================
   const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure to delete this enrollment?")) return;
+
     try {
-      await API.delete(`/enrollments/${id}/`); // ✅ FIXED
+      await API.delete(`/enrollments/${id}/`);
       fetchEnrollments();
     } catch (err) {
       console.error(err);
     }
   };
 
-  // ================= SAFE FIND =================
   const selectedStudent = students.find(
     s => s.id === Number(form.student)
   );
@@ -113,7 +115,6 @@ export default function Enrollments() {
 
         <div className="content">
 
-          {/* HEADER */}
           <div className="header-box">
             <h2>Enrollment Management</h2>
             <p>Enroll students into courses</p>
@@ -123,6 +124,7 @@ export default function Enrollments() {
           <div className="card">
             <form onSubmit={handleSubmit} className="form-grid">
 
+              {/* STUDENT */}
               <select
                 name="student"
                 value={form.student}
@@ -132,11 +134,12 @@ export default function Enrollments() {
                 <option value="">Select Student</option>
                 {students.map(s => (
                   <option key={s.id} value={s.id}>
-                    {s.username}
+                    {s.username} ({s.roll_number})
                   </option>
                 ))}
               </select>
 
+              {/* COURSE */}
               <select
                 name="course"
                 value={form.course}
@@ -146,16 +149,17 @@ export default function Enrollments() {
                 <option value="">Select Course</option>
                 {courses.map(c => (
                   <option key={c.id} value={c.id}>
-                    {c.title}
+                    {c.title} ({c.course_code})
                   </option>
                 ))}
               </select>
 
-              <button type="submit">Enroll</button>
+              <button type="submit" className="btn-primary">
+                Enroll
+              </button>
             </form>
 
-            {/* INFO */}
-            <div>
+            <div style={{ marginTop: "15px" }}>
               {selectedStudent && (
                 <p>
                   Dept: <strong>{selectedStudent.department}</strong>
@@ -175,7 +179,9 @@ export default function Enrollments() {
             <table>
               <thead>
                 <tr>
+                  <th>Student ID</th>
                   <th>Student</th>
+                  <th>Subject Code</th> {/* ✅ FIXED */}
                   <th>Course</th>
                   <th>Action</th>
                 </tr>
@@ -184,15 +190,20 @@ export default function Enrollments() {
               <tbody>
                 {enrollments.length === 0 ? (
                   <tr>
-                    <td colSpan="3">No enrollments</td>
+                    <td colSpan="5">No enrollments</td>
                   </tr>
                 ) : (
                   enrollments.map(e => (
                     <tr key={e.id}>
+                      <td>{e.student_id}</td>
                       <td>{e.student_name}</td>
+                      <td>{e.course_id}</td> {/* now shows CS001 */}
                       <td>{e.course_title}</td>
                       <td>
-                        <button onClick={() => handleDelete(e.id)}>
+                        <button
+                          className="btn-delete"
+                          onClick={() => handleDelete(e.id)}
+                        >
                           Delete
                         </button>
                       </td>

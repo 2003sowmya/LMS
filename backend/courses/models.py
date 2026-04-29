@@ -11,7 +11,13 @@ class Course(models.Model):
     title = models.CharField(max_length=200)
     description = models.TextField()
 
-    # ✅ Teacher is OPTIONAL now
+    course_code = models.CharField(
+        max_length=20,
+        unique=True,
+        null=True,
+        blank=True
+    )
+
     teacher = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
@@ -24,9 +30,16 @@ class Course(models.Model):
     department = models.CharField(max_length=50, default='General')
     created_at = models.DateTimeField(auto_now_add=True)
 
+    def save(self, *args, **kwargs):
+        if not self.course_code:
+            last = Course.objects.order_by('-id').first()
+            number = (last.id + 1) if last else 1
+            self.course_code = f"CSE{number:03d}"
+        super().save(*args, **kwargs)
+
     def __str__(self):
         teacher_name = self.teacher.username if self.teacher else "No Teacher"
-        return f"{self.title} - {teacher_name}"
+        return f"{self.course_code} - {self.title} ({teacher_name})"
 
 
 # ===================== ENROLLMENT MODEL =====================
@@ -47,7 +60,12 @@ class Enrollment(models.Model):
     enrolled_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ['student', 'course']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['student', 'course'],
+                name='unique_student_course'
+            )
+        ]
         ordering = ['-enrolled_at']
 
     def __str__(self):
@@ -119,18 +137,23 @@ class Submission(models.Model):
     )
 
     class Meta:
-        unique_together = ['assignment', 'student']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['assignment', 'student'],
+                name='unique_submission'
+            )
+        ]
         ordering = ['-submitted_at']
 
-    def __str__(self):
-        return f"{self.student.username} → {self.assignment.title} [{self.status}]"
-
     def save(self, *args, **kwargs):
-        if self.assignment.due_date and not self.pk:
+        if self.assignment and self.assignment.due_date and not self.pk:
             from django.utils import timezone
             if timezone.now() > self.assignment.due_date:
                 self.status = 'late'
         super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.student.username} → {self.assignment.title} [{self.status}]"
 
 
 # ===================== LECTURE =====================
@@ -156,12 +179,7 @@ class Note(models.Model):
     description = models.TextField(blank=True)
     chapter = models.CharField(max_length=200, blank=True)
 
-    course = models.ForeignKey(
-        Course,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True
-    )
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, null=True, blank=True)
 
     file = models.FileField(upload_to='notes/')
     uploaded_by = models.ForeignKey(User, on_delete=models.CASCADE, null=True)
@@ -173,12 +191,7 @@ class Note(models.Model):
 class LiveSession(models.Model):
     title = models.CharField(max_length=200)
 
-    course = models.ForeignKey(
-        Course,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True
-    )
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, null=True, blank=True)
 
     date = models.DateField(null=True, blank=True)
     time = models.TimeField(null=True, blank=True)
@@ -207,12 +220,7 @@ class Notification(models.Model):
 class Quiz(models.Model):
     title = models.CharField(max_length=200)
 
-    course = models.ForeignKey(
-        Course,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True
-    )
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, null=True, blank=True)
 
     time_limit = models.IntegerField(default=30)
     available_from = models.DateField(null=True, blank=True)
@@ -229,25 +237,20 @@ def notify_students_on_quiz_create(sender, instance, created, **kwargs):
     if created and instance.course:
         enrollments = Enrollment.objects.filter(course=instance.course)
 
-        notifications = [
+        Notification.objects.bulk_create([
             Notification(
-                user=enrollment.student,
+                user=e.student,
                 message=f"📝 New Quiz: {instance.title} in {instance.course.title}"
             )
-            for enrollment in enrollments
-        ]
-
-        Notification.objects.bulk_create(notifications)
+            for e in enrollments
+        ])
 
 
 # ===================== QUESTION =====================
 class Question(models.Model):
-    TYPES = [('mcq', 'MCQ'), ('truefalse', 'True/False')]
-
     quiz = models.ForeignKey(Quiz, on_delete=models.CASCADE, related_name='questions')
 
     question_text = models.TextField()
-    question_type = models.CharField(max_length=20, choices=TYPES, default='mcq')
 
     option_a = models.CharField(max_length=200, blank=True)
     option_b = models.CharField(max_length=200, blank=True)
@@ -269,13 +272,28 @@ class QuizAttempt(models.Model):
     submitted_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ['quiz', 'student']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['quiz', 'student'],
+                name='unique_quiz_attempt'
+            )
+        ]
 
 
 # ===================== MARK =====================
 class Mark(models.Model):
-    student = models.ForeignKey(User, on_delete=models.CASCADE, related_name='marks')
-    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='marks')
+    student = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='marks',
+        limit_choices_to={'role': 'student'}
+    )
+
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.CASCADE,
+        related_name='marks'
+    )
 
     assessment_type = models.CharField(max_length=50)
     marks_obtained = models.FloatField()
@@ -283,5 +301,13 @@ class Mark(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['student', 'course', 'assessment_type'],
+                name='unique_student_course_assessment'
+            )
+        ]
+
     def __str__(self):
-        return f"{self.student.username} - {self.assessment_type}"
+        return f"{self.student.username} - {self.course.title} - {self.assessment_type}"

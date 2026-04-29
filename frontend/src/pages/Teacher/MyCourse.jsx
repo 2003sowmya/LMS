@@ -4,77 +4,22 @@ import Navbar from "../../components/Navbar";
 import API from "../../api";
 import "../../App.css";
 
-function MyCoursesPage({ courses }) {
-  return (
-    <div>
-
-      {/* HEADER */}
-      <div className="page-header">
-        <h1 className="page-title">My Courses</h1>
-        <p className="page-sub">Courses assigned to you</p>
-      </div>
-
-      {/* CARD */}
-      <div className="card">
-        <div className="card-title">All Courses</div>
-
-        <div className="table-wrap">
-          <table className="styled-table">
-            <thead>
-              <tr>
-                <th>Course Name</th>
-                <th>Subject</th>
-                <th>Enrolled Students</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {courses.length === 0 ? (
-                <tr>
-                  <td colSpan={5} style={{ textAlign: "center", padding: 20 }}>
-                    No courses assigned
-                  </td>
-                </tr>
-              ) : (
-                courses.map((c) => (
-                  <tr key={c.id}>
-                    <td>{c.title || c.name}</td>
-                    <td>{c.department || "General"}</td>
-                    <td>{c.student_count || 0}</td>
-
-                    <td>
-                      <span className="badge badge-success">
-                        Active
-                      </span>
-                    </td>
-
-                    <td>
-                      <button className="btn-primary btn-sm">
-                        View
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-      </div>
-    </div>
-  );
-}
-
-function MyCourse() {
+export default function MyCourse() {
   const [courses, setCourses] = useState([]);
 
   useEffect(() => {
-    API.get("/courses/")
-      .then((res) => setCourses(res.data))
-      .catch((err) => console.log(err));
+    fetchCourses();
   }, []);
+
+  const fetchCourses = async () => {
+    try {
+      const res = await API.get("/courses/");
+      const data = res.data?.results || res.data;
+      setCourses(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Error fetching courses:", err);
+    }
+  };
 
   return (
     <div className="layout">
@@ -84,11 +29,68 @@ function MyCourse() {
         <Navbar />
 
         <div className="content">
-          <MyCoursesPage courses={courses} />
+
+          {/* HEADER */}
+          <div className="header-box">
+            <h2>My Courses</h2>
+            <p>Courses assigned to you</p>
+          </div>
+
+          {/* CARD */}
+          <div className="card">
+
+            <h3 style={{ marginBottom: "15px" }}>All Courses</h3>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>Course</th>
+                  <th>Subject</th>
+                  <th>Students</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {courses.length === 0 ? (
+                  <tr>
+                    <td colSpan="5" style={{ textAlign: "center" }}>
+                      No courses assigned
+                    </td>
+                  </tr>
+                ) : (
+                  courses.map((c) => (
+                    <tr key={c.id}>
+
+                      {/* ✅ CORRECT DATA */}
+                      <td>{c.title}</td>         {/* ECE 1st Year */}
+                      <td>{c.department}</td>    {/* ML / AI */}
+
+                      <td>{c.student_count || 0}</td>
+
+                      <td>
+                        <span className="badge badge-success">
+                          Active
+                        </span>
+                      </td>
+
+                      <td>
+                        <button className="btn-primary btn-sm">
+                          View
+                        </button>
+                      </td>
+
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+
+          </div>
+
         </div>
       </div>
     </div>
   );
 }
-
-export default MyCourse;

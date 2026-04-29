@@ -2,8 +2,9 @@
 from django.contrib.auth import authenticate
 
 from rest_framework import viewsets, status
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
 
 from rest_framework_simplejwt.tokens import RefreshToken
 
@@ -15,8 +16,18 @@ from .serializers import UserSerializer
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]   # ✅ PROTECT API
 
-    # ✅ CREATE USER
+    # 🔥 FILTER SUPPORT (IMPORTANT)
+    def get_queryset(self):
+        role = self.request.query_params.get("role")
+
+        if role:
+            return User.objects.filter(role=role)
+
+        return User.objects.all()
+
+    # ================= CREATE =================
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
 
@@ -26,7 +37,7 @@ class UserViewSet(viewsets.ModelViewSet):
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    # ✅ UPDATE USER
+    # ================= UPDATE =================
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
 
@@ -42,7 +53,7 @@ class UserViewSet(viewsets.ModelViewSet):
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    # ✅ DELETE USER
+    # ================= DELETE =================
     def destroy(self, request, *args, **kwargs):
         user = self.get_object()
 
@@ -67,22 +78,62 @@ def login_view(request):
     username = request.data.get("username")
     password = request.data.get("password")
 
-    # 🔐 Authenticate user
+    if not username or not password:
+        return Response(
+            {"error": "Username and password required"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
     user = authenticate(username=username, password=password)
 
     if user:
-        # ✅ Generate JWT tokens
         refresh = RefreshToken.for_user(user)
 
+        role = "admin" if user.is_superuser else user.role
+
         return Response({
-            "access": str(refresh.access_token),   # 🔥 IMPORTANT
+            "access": str(refresh.access_token),
             "refresh": str(refresh),
             "id": user.id,
             "username": user.username,
-            "role": user.role
+            "email": user.email,   # ✅ ADDED
+            "role": role,
+            "is_superuser": user.is_superuser
         })
 
     return Response(
         {"error": "Invalid credentials"},
         status=status.HTTP_400_BAD_REQUEST
     )
+
+
+# ===================== ADMIN DASHBOARD =====================
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def admin_dashboard(request):
+    try:
+        if not request.user.is_superuser and request.user.role != "admin":
+            return Response(
+                {"error": "Access denied"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        from courses.models import Course, Enrollment
+
+        total_users = User.objects.count()
+        total_students = User.objects.filter(role="student").count()
+        total_teachers = User.objects.filter(role="teacher").count()
+        total_courses = Course.objects.count()
+        total_enrollments = Enrollment.objects.count()
+
+        return Response({
+            "total_users": total_users,
+            "total_students": total_students,
+            "total_teachers": total_teachers,
+            "total_courses": total_courses,
+            "total_enrollments": total_enrollments
+        })
+
+    except Exception as e:
+        print("ADMIN DASHBOARD ERROR:", str(e))
+        return Response({"error": str(e)}, status=500)
