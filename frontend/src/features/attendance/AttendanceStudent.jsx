@@ -1,0 +1,695 @@
+import { useEffect, useState } from "react";
+import Sidebar from "../../components/Sidebar";
+import Navbar from "../../components/Navbar";
+import API from "../../api";
+import "../../styles/Attendance.css";
+
+const DOT_LABEL = { present: "P", absent: "A", duty_leave: "DL" };
+
+const fmtDate = (iso) => {
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-");
+  return `${d}-${m}-${y}`;
+};
+
+// ── On Duty: form categories (must match backend ODRequest.Category) ──
+const OD_CATEGORIES = [
+  { value: "paper_presentation", label: "Paper presentation" },
+  { value: "seminar", label: "Seminar / conference" },
+  { value: "placement", label: "Placement drive" },
+  { value: "sports", label: "Sports" },
+  { value: "nss_ncc", label: "NSS / NCC" },
+  { value: "other", label: "Other" },
+];
+
+// ── On Duty: status pill class + text from status + stage ──
+const odStatusBadge = (r) => {
+  if (r.status === "approved")  return { key: "approved",  text: "Approved" };
+  if (r.status === "rejected")  return { key: "rejected",  text: "Rejected" };
+  if (r.status === "cancelled") return { key: "cancelled", text: "Cancelled" };
+  if (r.stage === "awaiting_hod") return { key: "awaiting_hod", text: "Awaiting HOD" };
+  return { key: "awaiting_tutor", text: "Awaiting tutor" };
+};
+
+export default function AttendanceStudent() {
+  const [open, setOpen] = useState(false);
+  const [view, setView] = useState("daily");
+
+  // class period numbers from admin's timetable (e.g. [1,2,3,4,5,6,7,8])
+  const [hours, setHours] = useState([]);
+
+  // top summary (semester start → today, all subjects)
+  const [summary, setSummary] = useState(null); // { present, absent, duty, total, pct }
+
+  const [fromDate, setFromDate]   = useState("");
+  const [toDate, setToDate]       = useState("");
+  const [dailyData, setDailyData] = useState([]);
+  const [dailyRaw, setDailyRaw]   = useState([]);
+  const [dailyLoading, setDailyLoading] = useState(false);
+  const [semStart, setSemStart]   = useState("");   // cached semester start for the default range
+
+  const [cwFrom, setCwFrom]               = useState("");
+  const [cwTo, setCwTo]                   = useState("");
+  const [courseReport, setCourseReport]   = useState([]);
+  const [cwLoading, setCwLoading]         = useState(false);
+
+  // ── On Duty state ──
+  const [odCategory, setOdCategory]   = useState("paper_presentation");
+  const [odFrom, setOdFrom]           = useState("");
+  const [odTo, setOdTo]               = useState("");
+  const [odReason, setOdReason]       = useState("");
+  const [odProof, setOdProof]         = useState(null);
+  const [odList, setOdList]           = useState([]);
+  const [odLoading, setOdLoading]     = useState(false);
+  const [odSubmitting, setOdSubmitting] = useState(false);
+
+  // ── load the real periods admin created (class periods only) ──
+  useEffect(() => {
+    const loadPeriods = async () => {
+      try {
+        const res = await API.get("/timeslots/");
+        const slots = res.data || [];
+        const classHours = slots
+          .filter((s) => !s.is_break)               // breaks aren't marked for attendance
+          .map((s) => Number(s.period_no))
+          .filter((n) => !Number.isNaN(n))
+          .sort((a, b) => a - b);
+        // de-dup while keeping order
+        setHours([...new Set(classHours)]);
+      } catch (err) {
+        console.error("Load periods error:", err);
+        setHours([]);   // fall back below, derived from the data
+      }
+    };
+    loadPeriods();
+  }, []);
+
+  // ── summary: semester start → today, across all subjects ──
+  useEffect(() => {
+    const loadSummary = async () => {
+      try {
+        let fromParam = "";
+        try {
+          const semRes = await API.get("/semester/");
+          const sem = (semRes.data || [])[0];
+          if (sem && sem.start_date) fromParam = sem.start_date;
+        } catch { /* no semester → fall back to all-time below */ }
+
+        const today = new Date().toISOString().slice(0, 10);
+        // with a semester start: that range; otherwise all of the student's records
+        const url = fromParam
+          ? `/attendance/?from_date=${fromParam}&to_date=${today}`
+          : `/attendance/`;
+        const res = await API.get(url);
+        const data = res.data?.results || res.data || [];
+
+        let present = 0, absent = 0, duty = 0;
+        data.forEach((a) => {
+          if (a.status === "present") present++;
+          else if (a.status === "duty_leave") duty++;
+          else if (a.status === "absent") absent++;
+        });
+        const total = present + absent + duty;
+        const pct = total ? Math.round(((present + duty) / total) * 100) : 0;
+        setSummary({ present, absent, duty, total, pct });
+      } catch (err) {
+        console.error("Summary load error:", err);
+      }
+    };
+    loadSummary();
+  }, []);
+
+  // ── default Daily view: auto-load the whole semester so the table is populated on open ──
+  useEffect(() => {
+    const loadDefaultRange = async () => {
+      try {
+        const semRes = await API.get("/semester/");
+        const sem = (semRes.data || [])[0];
+        const today = new Date().toISOString().slice(0, 10);
+        const start = sem?.start_date || "";
+        if (start) {
+          setSemStart(start);
+          setFromDate(start);
+          setToDate(today);
+          runDaily(start, today);   // populate immediately — no click needed
+        }
+      } catch (err) {
+        console.error("Default range load error:", err);
+      }
+    };
+    loadDefaultRange();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── On Duty: load my requests ──
+  const loadOd = async () => {
+    setOdLoading(true);
+    try {
+      const res = await API.get("users/od/");
+      setOdList(res.data?.results || res.data || []);
+    } catch (err) {
+      console.error("OD load error:", err);
+    } finally {
+      setOdLoading(false);
+    }
+  };
+  useEffect(() => { loadOd(); }, []);
+
+  const submitOd = async () => {
+    if (!odFrom || !odTo) return alert("Please select both From and To dates.");
+    if (odTo < odFrom)    return alert("To date cannot be before From date.");
+    if (!odReason.trim()) return alert("Please enter a reason.");
+    setOdSubmitting(true);
+    try {
+      const fd = new FormData();
+      fd.append("from_date", odFrom);
+      fd.append("to_date", odTo);
+      fd.append("category", odCategory);
+      fd.append("reason", odReason.trim());
+      if (odProof) fd.append("proof", odProof);
+      // no Content-Type header — axios sets multipart boundary from FormData
+      await API.post("users/od/create/", fd);
+      setOdFrom(""); setOdTo(""); setOdReason("");
+      setOdProof(null); setOdCategory("paper_presentation");
+      const fileEl = document.getElementById("od-proof-input");
+      if (fileEl) fileEl.value = "";
+      await loadOd();
+      alert("On-duty request submitted.");
+    } catch (err) {
+      const d = err?.response?.data;
+      const msg = d?.detail || d?.non_field_errors?.[0] || "Could not submit request.";
+      alert(msg);
+    } finally {
+      setOdSubmitting(false);
+    }
+  };
+
+  const cancelOd = async (id) => {
+    if (!window.confirm("Cancel this on-duty request?")) return;
+    try {
+      await API.post(`users/od/${id}/cancel/`);
+      await loadOd();
+    } catch (err) {
+      alert(err?.response?.data?.detail || "Could not cancel.");
+    }
+  };
+
+  // If periods haven't loaded (or none exist), fall back to the hours
+  // actually present in the fetched attendance so the table still shows.
+  const hoursFor = (records) => {
+    if (hours.length) return hours;
+    const found = [...new Set(records.map((a) => Number(a.hour)).filter((n) => !Number.isNaN(n)))]
+      .sort((a, b) => a - b);
+    return found.length ? found : [1, 2, 3, 4, 5, 6, 7, 8];
+  };
+
+  // core fetch — takes explicit dates so it can run on mount before state settles
+  const runDaily = async (f, t) => {
+    if (!f || !t) return;
+    setDailyLoading(true);
+    try {
+      const res  = await API.get(`/attendance/?from_date=${f}&to_date=${t}`);
+      const data = res.data?.results || res.data || [];
+      setDailyRaw(data);
+      const grouped = {};
+      data.forEach((a) => {
+        if (!grouped[a.date]) grouped[a.date] = {};
+        grouped[a.date][a.hour] = a.status;
+      });
+      setDailyData(Object.keys(grouped).sort().map((date) => ({ date, hours: grouped[date] })));
+    } catch { alert("Error fetching attendance."); }
+    finally { setDailyLoading(false); }
+  };
+
+  // Search button — uses whatever is in the pickers (a custom narrower range)
+  const fetchDaily = () => {
+    if (!fromDate || !toDate) return alert("Please select both From Date and To Date.");
+    runDaily(fromDate, toDate);
+  };
+
+  // Reset returns to the full-semester view rather than a blank screen
+  const resetDaily = () => {
+    const today = new Date().toISOString().slice(0, 10);
+    if (semStart) {
+      setFromDate(semStart);
+      setToDate(today);
+      runDaily(semStart, today);
+    } else {
+      setFromDate(""); setToDate(""); setDailyData([]); setDailyRaw([]);
+    }
+  };
+
+  const fetchCourseWise = async () => {
+    if (!cwFrom || !cwTo) return alert("Please select both From Date and To Date.");
+    setCwLoading(true);
+    try {
+      const res  = await API.get(`/attendance/?from_date=${cwFrom}&to_date=${cwTo}`);
+      const data = res.data?.results || res.data || [];
+      const subjectMap = {};
+      data.forEach((a) => {
+        const key = a.teaching_assignment;
+        if (!subjectMap[key]) subjectMap[key] = { subject: a.subject_name, course: a.course_name, total: 0, present: 0, duty: 0 };
+        subjectMap[key].total++;
+        if (a.status === "present")         subjectMap[key].present++;
+        else if (a.status === "duty_leave") subjectMap[key].duty++;
+      });
+      setCourseReport(Object.values(subjectMap));
+    } catch { alert("Error fetching report."); }
+    finally { setCwLoading(false); }
+  };
+
+  const resetCourseWise = () => { setCwFrom(""); setCwTo(""); setCourseReport([]); };
+
+  const handlePrintDaily = () => {
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    const printHours = hoursFor(dailyRaw);
+    const hourHeaders = printHours.map(h => `<th>Hour ${h}</th>`).join("");
+    const rows = dailyData.map((row) => {
+      const hasAny = Object.keys(row.hours).length > 0;
+      if (!hasAny) return `<tr><td class="date-col" style="color:#dc2626">${fmtDate(row.date)}</td><td colspan="${printHours.length}" style="text-align:center;color:#dc2626;font-style:italic">Holiday / No Classes</td></tr>`;
+      const cells = printHours.map(h => {
+        const s = row.hours[h];
+        if (s === "present")    return `<td class="p">P</td>`;
+        if (s === "absent")     return `<td class="a">A</td>`;
+        if (s === "duty_leave") return `<td class="dl">DL</td>`;
+        return `<td class="dash">—</td>`;
+      }).join("");
+      return `<tr><td class="date-col">${fmtDate(row.date)}</td>${cells}</tr>`;
+    }).join("");
+    const html = `<html><head><title>Daily Attendance</title>
+    <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:13px;padding:30px}
+    .title{text-align:center;font-size:16px;font-weight:bold;border:2px solid #000;padding:8px;border-bottom:none}
+    .info-table{width:100%;border-collapse:collapse;border:2px solid #000;border-top:none}
+    .info-table td{border:1px solid #000;padding:7px 10px}
+    .rule{text-align:center;border:1px solid #000;border-top:none;padding:7px;margin-bottom:12px}
+    table.att{width:100%;border-collapse:collapse}
+    table.att th{border:1px solid #ccc;padding:7px 5px;background:#f5f5f5;text-align:center;font-weight:bold}
+    table.att td{border:1px solid #ccc;padding:6px 5px;text-align:center}
+    .date-col{text-align:left!important;padding-left:10px!important;font-weight:600}
+    .p{color:#16a34a;font-weight:bold}.a{color:#dc2626;font-weight:bold}.dl{color:#d97706;font-weight:bold}.dash{color:#ccc}
+    @media print{@page{size:A4 landscape;margin:15mm}}</style></head>
+    <body>
+      <div class="title">Daily Attendance</div>
+      <table class="info-table"><tr>
+        <td><b>Student Name:</b> ${user.username || "-"}</td>
+        <td><b>Roll No:</b> ${user.roll_number || "-"}</td>
+        <td><b>Course:</b> ${dailyRaw[0]?.course_name || "-"}</td>
+        <td><b>Year:</b> ${dailyRaw[0]?.year_number || "-"}</td>
+        <td><b>Semester:</b> ${dailyRaw[0]?.semester || "-"}</td>
+      </tr></table>
+      <div class="rule">Using attendance rule from <b>${fmtDate(fromDate)}</b> to <b>${fmtDate(toDate)}</b></div>
+      <table class="att"><thead><tr><th class="date-col">Dates</th>${hourHeaders}</tr></thead><tbody>${rows}</tbody></table>
+      <p style="font-size:12px;color:#555;margin-top:10px">P = Present &nbsp; A = Absent &nbsp; DL = Duty Leave</p>
+    </body></html>`;
+    const win = window.open("", "_blank"); win.document.write(html); win.document.close(); win.print();
+  };
+
+  const handlePrintCourseWise = () => {
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    const rows = courseReport.map((c, idx) => {
+      const ahPct = c.total > 0 ? ((c.present / c.total) * 100).toFixed(2) : "0.00";
+      const dlPct = c.total > 0 ? (((c.present + c.duty) / c.total) * 100).toFixed(2) : "0.00";
+      const isLow = parseFloat(dlPct) < 75;
+      return `<tr style="color:${isLow ? "#dc2626" : "#000"}">
+        <td style="border:1px solid #ccc;padding:6px;text-align:center">${idx + 1}</td>
+        <td style="border:1px solid #ccc;padding:8px 6px"><b>${c.subject}</b>${c.course ? ` (${c.course})` : ""}</td>
+        <td style="border:1px solid #ccc;padding:6px;text-align:center">${c.total}</td>
+        <td style="border:1px solid #ccc;padding:6px;text-align:center">${c.present}</td>
+        <td style="border:1px solid #ccc;padding:6px;text-align:center">${c.duty}</td>
+        <td style="border:1px solid #ccc;padding:6px;text-align:center">${c.present + c.duty}</td>
+        <td style="border:1px solid #ccc;padding:6px;text-align:center;${parseFloat(ahPct) < 75 ? "color:#dc2626;font-weight:700" : "color:#16a34a;font-weight:700"}">${ahPct}%</td>
+        <td style="border:1px solid #ccc;padding:6px;text-align:center;${isLow ? "color:#dc2626;font-weight:700" : "color:#16a34a;font-weight:700"}">${dlPct}%</td>
+      </tr>`;
+    }).join("");
+    const html = `<html><head><title>Course Wise Attendance</title>
+    <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:13px;padding:24px}
+    .college{text-align:center;font-size:18px;font-weight:bold;margin-bottom:6px}
+    .rtitle{text-align:center;font-size:14px;font-weight:bold;border:2px solid #000;padding:8px;margin-bottom:12px}
+    table{width:100%;border-collapse:collapse}th{background:#f1f5f9;border:1px solid #ccc;padding:7px;text-align:center;font-weight:bold}
+    @media print{@page{size:A4 landscape;margin:12mm}}</style></head>
+    <body>
+      <div class="college">Learning Management System</div>
+      <div class="rtitle">Course Wise Attendance Report</div>
+      <p style="font-size:13px;margin-bottom:10px"><b>Student:</b> ${user.username || "-"} &nbsp; <b>Roll No:</b> ${user.roll_number || "-"} &nbsp; <b>Date Range:</b> ${fmtDate(cwFrom)} to ${fmtDate(cwTo)}</p>
+      <table><thead><tr><th>Sl.No</th><th>Course Name</th><th>TH</th><th>AH</th><th>DL</th><th>AH+DL</th><th>AH%</th><th>AH+DL%</th></tr></thead><tbody>${rows}</tbody></table>
+      <p style="font-size:11px;color:#888;margin-top:8px">* Red = below 75% (with duty leave) | TH: Total Hours | AH: Attended | DL: Duty Leave</p>
+    </body></html>`;
+    const win = window.open("", "_blank"); win.document.write(html); win.document.close(); win.print();
+  };
+
+  // hours to render in the on-screen daily table
+  const dailyHours = hoursFor(dailyRaw);
+
+  const pctClass = summary
+    ? (summary.pct >= 75 ? "green" : summary.pct >= 60 ? "amber" : "red")
+    : "dark";
+
+  return (
+    <div className="app">
+      <Navbar setOpen={setOpen} />
+      <div className="layout">
+        <Sidebar open={open} setOpen={setOpen} />
+        <div className="main">
+          <div className="content">
+            <div className="att-page">
+
+              {/* ── Header ── */}
+              <div className="att-header">
+                <div>
+                  <h1 className="att-title">My Attendance</h1>
+                  <p className="att-subtitle">View your attendance records</p>
+                </div>
+              </div>
+
+              {/* ── Summary (semester to date, all subjects) ── */}
+              {summary && summary.total > 0 && (
+                <div className="att-summary-grid">
+                  <div className="att-sum-card">
+                    <div className="att-sum-label">Overall attendance</div>
+                    <div className={`att-sum-value big ${pctClass}`}>{summary.pct}%</div>
+                    <div className="att-sum-hint">Since semester start</div>
+                  </div>
+                  <div className="att-sum-card">
+                    <div className="att-sum-label">Present</div>
+                    <div className="att-sum-value green">{summary.present + summary.duty}</div>
+                    {summary.duty > 0 && <div className="att-sum-hint">incl. {summary.duty} duty leave</div>}
+                  </div>
+                  <div className="att-sum-card">
+                    <div className="att-sum-label">Absent</div>
+                    <div className="att-sum-value red">{summary.absent}</div>
+                  </div>
+                  <div className="att-sum-card">
+                    <div className="att-sum-label">Total classes</div>
+                    <div className="att-sum-value dark">{summary.total}</div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Tabs ── */}
+              <div className="att-tabs">
+                <button className={`att-tab${view === "daily" ? " active" : ""}`} onClick={() => setView("daily")}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15">
+                    <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
+                    <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+                  </svg>
+                  Daily Attendance
+                </button>
+                <button className={`att-tab${view === "coursewise" ? " active" : ""}`} onClick={() => setView("coursewise")}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
+                  </svg>
+                  Course Wise Report
+                </button>
+                <button className={`att-tab${view === "onduty" ? " active" : ""}`} onClick={() => setView("onduty")}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/>
+                  </svg>
+                  On Duty
+                </button>
+              </div>
+
+              {/* ════════ DAILY ATTENDANCE ════════ */}
+              {view === "daily" && (
+                <div className="att-card">
+                  <h2 className="att-card-title">Daily Attendance</h2>
+
+                  <div className="att-filter-row">
+                    <div className="att-field">
+                      <label className="att-label">From Date</label>
+                      <input className="att-input att-input-date" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+                    </div>
+                    <div className="att-field">
+                      <label className="att-label">To Date</label>
+                      <input className="att-input att-input-date" type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+                    </div>
+                    <div className="att-btn-row">
+                      <button className="att-btn-primary" onClick={() => fetchDaily()}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                        </svg>
+                        Search
+                      </button>
+                      <button className="att-btn-outline" onClick={resetDaily}>Reset</button>
+                      {dailyData.length > 0 && (
+                        <button className="att-btn-outline" onClick={handlePrintDaily}>
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                            <polyline points="6 9 6 2 18 2 18 9"/>
+                            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                            <rect x="6" y="14" width="12" height="8"/>
+                          </svg>
+                          Print
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {dailyLoading ? (
+                    <div className="att-state"><div className="att-spinner" /><p>Loading…</p></div>
+                  ) : dailyData.length === 0 ? (
+                    <div className="att-state"><p>No attendance records found for this range. Try a different date range.</p></div>
+                  ) : (
+                    <>
+                      <p className="att-rule-note">
+                        Using attendance rule from <b>{fmtDate(fromDate)}</b> to <b>{fmtDate(toDate)}</b>
+                      </p>
+                      <div className="att-table-wrap">
+                        <table className="att-table">
+                          <thead>
+                            <tr>
+                              <th>Dates</th>
+                              {dailyHours.map((h) => <th key={h} className="center">Hour {h}</th>)}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {dailyData.map((row, idx) => {
+                              const hasAny = Object.keys(row.hours).length > 0;
+                              return (
+                                <tr key={idx}>
+                                  <td className={`att-td-date${!hasAny ? " holiday" : ""}`}>
+                                    {fmtDate(row.date)}
+                                  </td>
+                                  {!hasAny ? (
+                                    <td colSpan={dailyHours.length} className="att-holiday-cell">Holiday / No Classes</td>
+                                  ) : (
+                                    dailyHours.map((h) => {
+                                      const status = row.hours[h];
+                                      return (
+                                        <td key={h} className="center">
+                                          {status
+                                            ? <span className={`att-dot ${status}`}>{DOT_LABEL[status]}</span>
+                                            : <span className="att-dot-empty">—</span>
+                                          }
+                                        </td>
+                                      );
+                                    })
+                                  )}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Legend */}
+                      <div className="att-dot-legend">
+                        <span className="att-legend-item"><span className="att-dot present">P</span> Present</span>
+                        <span className="att-legend-item"><span className="att-dot absent">A</span> Absent</span>
+                        <span className="att-legend-item"><span className="att-dot duty_leave">DL</span> Duty Leave</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* ════════ COURSE WISE REPORT ════════ */}
+              {view === "coursewise" && (
+                <div className="att-card">
+                  <h2 className="att-card-title">Course Wise Report</h2>
+
+                  <div className="att-filter-row">
+                    <div className="att-field">
+                      <label className="att-label">From Date</label>
+                      <input className="att-input att-input-date" type="date" value={cwFrom} onChange={(e) => setCwFrom(e.target.value)} />
+                    </div>
+                    <div className="att-field">
+                      <label className="att-label">To Date</label>
+                      <input className="att-input att-input-date" type="date" value={cwTo} onChange={(e) => setCwTo(e.target.value)} />
+                    </div>
+                    <div className="att-btn-row">
+                      <button className="att-btn-primary" onClick={fetchCourseWise}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                        </svg>
+                        Search
+                      </button>
+                      <button className="att-btn-outline" onClick={resetCourseWise}>Reset</button>
+                      {courseReport.length > 0 && (
+                        <button className="att-btn-outline" onClick={handlePrintCourseWise}>
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                            <polyline points="6 9 6 2 18 2 18 9"/>
+                            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                            <rect x="6" y="14" width="12" height="8"/>
+                          </svg>
+                          Print
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="att-legend">
+                    <span><b>TH</b> Total Hours</span>
+                    <span><b>AH</b> Attended Hours</span>
+                    <span><b>DL</b> Duty Leave</span>
+                    <span><b>AH+DL</b> Attended + Duty Leave</span>
+                    <span><b>AH%</b> Attendance %</span>
+                    <span><b>AH+DL%</b> With Duty Leave %</span>
+                  </div>
+
+                  {cwLoading ? (
+                    <div className="att-state"><div className="att-spinner" /><p>Loading…</p></div>
+                  ) : courseReport.length === 0 ? (
+                    <div className="att-state"><p>Select a date range and click Search to view your report.</p></div>
+                  ) : (
+                    <>
+                      {cwFrom && cwTo && (
+                        <p className="att-rule-note">
+                          Using attendance rule from <b>{fmtDate(cwFrom)}</b> to <b>{fmtDate(cwTo)}</b>
+                        </p>
+                      )}
+                      <div className="att-table-wrap">
+                        <table className="att-table">
+                          <thead>
+                            <tr>
+                              <th>Sl.No</th>
+                              <th>Course Name</th>
+                              <th className="center">TH</th>
+                              <th className="center">AH</th>
+                              <th className="center">DL</th>
+                              <th className="center">AH+DL</th>
+                              <th className="center">AH%</th>
+                              <th className="center">AH+DL%</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {courseReport.map((c, idx) => {
+                              const ahPct = c.total > 0 ? ((c.present / c.total) * 100).toFixed(2) : "0.00";
+                              const dlPct = c.total > 0 ? (((c.present + c.duty) / c.total) * 100).toFixed(2) : "0.00";
+                              const ahLow = parseFloat(ahPct) < 75;
+                              const isLow = parseFloat(dlPct) < 75;
+                              return (
+                                <tr key={idx} className={isLow ? "att-row-low" : ""}>
+                                  <td>{idx + 1}</td>
+                                  <td>
+                                    <span className="att-td-name">{c.subject}</span>
+                                    {c.course && <span className="att-td-sub"> ({c.course})</span>}
+                                  </td>
+                                  <td className="center">{c.total}</td>
+                                  <td className="center">{c.present}</td>
+                                  <td className="center">{c.duty}</td>
+                                  <td className="center">{c.present + c.duty}</td>
+                                  <td className={`center att-pct${ahLow ? " low" : " good"}`}>{ahPct}%</td>
+                                  <td className={`center att-pct${isLow ? " low" : " good"}`}>{dlPct}%</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      <p className="att-footnote">* Rows highlighted in red indicate attendance below 75% (counting duty leave as attended)</p>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* ════════ ON DUTY ════════ */}
+              {view === "onduty" && (
+                <div className="att-card">
+                  <h2 className="att-card-title">Apply for On Duty</h2>
+
+                  <div className="att-od-form-grid">
+                    <div className="att-field">
+                      <label className="att-label">From Date</label>
+                      <input className="att-input att-input-date" type="date" value={odFrom} onChange={(e) => setOdFrom(e.target.value)} />
+                    </div>
+                    <div className="att-field">
+                      <label className="att-label">To Date</label>
+                      <input className="att-input att-input-date" type="date" value={odTo} onChange={(e) => setOdTo(e.target.value)} />
+                    </div>
+                    <div className="att-field">
+                      <label className="att-label">Category</label>
+                      <select className="att-input" value={odCategory} onChange={(e) => setOdCategory(e.target.value)}>
+                        {OD_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="att-field">
+                    <label className="att-label">Reason</label>
+                    <textarea
+                      className="att-od-textarea"
+                      value={odReason}
+                      onChange={(e) => setOdReason(e.target.value)}
+                      rows={2}
+                      placeholder="e.g. Presenting a paper at the national symposium, SSN College"
+                    />
+                  </div>
+
+                  <div className="att-field">
+                    <label className="att-label">Proof (optional)</label>
+                    <input id="od-proof-input" className="att-od-file" type="file" onChange={(e) => setOdProof(e.target.files?.[0] || null)} />
+                  </div>
+
+                  <div className="att-od-submit-row">
+                    <button className="att-btn-primary" onClick={submitOd} disabled={odSubmitting}>
+                      {odSubmitting ? "Submitting…" : "Submit request"}
+                    </button>
+                  </div>
+
+                  {/* My requests */}
+                  <h2 className="att-card-title att-od-list-title">My Requests</h2>
+                  {odLoading ? (
+                    <div className="att-state"><div className="att-spinner" /><p>Loading…</p></div>
+                  ) : odList.length === 0 ? (
+                    <div className="att-state"><p>You haven't submitted any on-duty requests yet.</p></div>
+                  ) : (
+                    <div className="att-od-list">
+                      {odList.map((r) => {
+                        const badge = odStatusBadge(r);
+                        return (
+                          <div key={r.id} className="att-od-item">
+                            <div className="att-od-row">
+                              <div className="att-od-main">
+                                <div className="att-od-cat">{r.category_label}</div>
+                                <div className="att-od-dates">{fmtDate(r.from_date)} → {fmtDate(r.to_date)}</div>
+                              </div>
+
+                              {r.reason && <div className="att-od-reason-cell">{r.reason}</div>}
+
+                              <div className="att-od-actions">
+                                {r.status === "pending" && (
+                                  <button className="att-btn-outline" onClick={() => cancelOd(r.id)}>Cancel request</button>
+                                )}
+                                <span className={`att-od-badge ${badge.key}`}>{badge.text}</span>
+                              </div>
+                            </div>
+
+                            {r.tutor_remark && <div className="att-od-remark"><b>Tutor:</b> {r.tutor_remark}</div>}
+                            {r.hod_remark && <div className="att-od-remark"><b>HOD:</b> {r.hod_remark}</div>}
+                            {r.status === "approved" && <div className="att-od-approved-note">Counted as duty leave in your attendance.</div>}
+                            {r.proof && <a href={r.proof} target="_blank" rel="noreferrer" className="att-od-proof">View proof</a>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
