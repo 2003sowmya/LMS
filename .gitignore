@@ -28,3 +28,8 @@ backend/staticfiles/
 *.sw?backend/reminder_log.txt
 
 backend/reminder_log.txt
+
+backend/DataBackup.backup
+frontend/src/pages - Shortcut.lnk
+backend/DataBackup.backup
+frontend/src/pages - Shortcut.lnk
