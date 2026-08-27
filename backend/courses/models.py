@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.db import models
 from django.contrib.auth import get_user_model
 from django.utils import timezone
@@ -761,7 +763,7 @@ class MaterialFolder(models.Model):
         return f"{self.name} ({self.teaching_assignment})"
     
 # ===================== FILE CLEANUP SIGNAL =====================
-from django.db.models.signals import post_delete
+from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
 
@@ -771,9 +773,6 @@ def delete_studymaterial_file(sender, instance, **kwargs):
     if instance.file:
         instance.file.delete(save=False)
 
-#_________________________________________#
-
-# ===================== FEE =====================
 class Fee(models.Model):
     STATUS_CHOICES = [
         ('pending', 'Pending'),
@@ -787,7 +786,7 @@ class Fee(models.Model):
     )
     term = models.CharField(max_length=50)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
-    paid_amount = models.DecimalField(         
+    paid_amount = models.DecimalField(
         max_digits=10, decimal_places=2, default=0)
     due_date = models.DateField()
     paid_date = models.DateField(null=True, blank=True)
@@ -797,9 +796,65 @@ class Fee(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.student.username} – {self.term}"
-    
+        return f"{self.student.username} - {self.term}"
 
+    def recalculate(self):
+        """
+        Single source of truth for this fee's figures.
+
+        paid_amount, status and paid_date are always DERIVED from the
+        FeePayment rows - never incremented in place. Called from the signals
+        below whenever a payment is created, changed or deleted, so a
+        correction made in the Django admin refreshes the fee exactly the same
+        way a payment through the API does.
+        """
+        total = self.payments.aggregate(
+            t=models.Sum('amount')
+        )['t'] or Decimal('0')
+
+        self.paid_amount = total
+
+        if total >= self.amount:
+            self.status = 'paid'
+            last = self.payments.first()          # Meta.ordering: newest first
+            self.paid_date = last.paid_on if last else None
+        elif total > 0:
+            self.status = 'partial'
+            self.paid_date = None
+        else:
+            self.status = 'pending'
+            self.paid_date = None
+
+        self.save(update_fields=['paid_amount', 'status', 'paid_date'])
+
+
+# ===================== FEE PAYMENT =====================
+class FeePayment(models.Model):
+    """
+    One payment made toward a Fee. These rows are the record of money
+    received; Fee.paid_amount is derived from them, never the reverse.
+    """
+    fee = models.ForeignKey(
+        Fee, on_delete=models.CASCADE, related_name='payments'
+    )
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    paid_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name='fee_payments_made'
+    )
+    recorded_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name='fee_payments_recorded'
+    )
+    paid_on = models.DateField(default=timezone.localdate)
+    reference = models.CharField(max_length=100, blank=True)
+    remarks = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-paid_on', '-id']
+
+    def __str__(self):
+        return f"{self.fee.student.username} - {self.amount} on {self.paid_on}"
+    
 # ===================== PARENT MESSAGE =====================
 class ParentMessage(models.Model):
     sender = models.ForeignKey(
@@ -867,3 +922,20 @@ class YearTutor(models.Model):
 
     def __str__(self):
         return f"{self.teacher} → {self.course.name} Year {self.year.year_number}"
+
+
+
+# ===================== FEE RECALCULATION SIGNALS =====================
+# Fee.paid_amount / status / paid_date are derived values. These signals mean
+# ANY change to a payment row refreshes them - through the API, the Django
+# admin, a shell session or a future bulk import. There is no write path that
+# can leave a fee disagreeing with its own payment history.
+
+@receiver(post_save, sender=FeePayment)
+def feepayment_saved(sender, instance, **kwargs):
+    instance.fee.recalculate()
+
+
+@receiver(post_delete, sender=FeePayment)
+def feepayment_deleted(sender, instance, **kwargs):
+    instance.fee.recalculate()

@@ -1,11 +1,13 @@
 # ===================== IMPORTS =====================
+# ===================== IMPORTS =====================
 import os
 import json
 import re
 import requests
+from django.db import models
+from django.db.models import Sum
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-from django.db import models
 from decimal import Decimal, InvalidOperation
 
 from rest_framework import viewsets
@@ -34,6 +36,7 @@ from .models import (
     Feedback,
     MaterialFolder,
     Fee,
+    FeePayment,
 )
 
 from .serializers import (
@@ -1810,6 +1813,7 @@ def class_progress(request):
 class FeeViewSet(viewsets.ModelViewSet):
     serializer_class = FeeSerializer
     permission_classes = [IsAuthenticated]
+
     def get_queryset(self):
         user = self.request.user
         if user.role in ('admin', 'accounts_admin'):
@@ -1828,10 +1832,25 @@ class FeeViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def pay(self, request, pk=None):
-        fee = self.get_object()   # already scoped to the parent's children / student's own fees
+        """
+        Record ONE payment toward this fee.
 
-        if request.user.role not in ('parent', 'student'):
-            return Response({'detail': 'Only a parent or student can pay.'}, status=403)
+        Each call creates a FeePayment row rather than incrementing a running
+        total. paid_amount, status and paid_date are recalculated FROM those
+        rows by the post_save signal on FeePayment, so the fee's figures can
+        never disagree with its payment history.
+
+        Body: {"amount": 2000, "reference": "RCPT-1042", "remarks": ""}
+        """
+        fee = self.get_object()   # already scoped by get_queryset above
+
+        # Students and parents pay their own; the accounts admin records a
+        # payment made at the office counter.
+        if request.user.role not in ('parent', 'student', 'admin', 'accounts_admin'):
+            return Response(
+                {'detail': 'You cannot record a payment.'},
+                status=403,
+            )
 
         try:
             pay_amt = Decimal(str(request.data.get('amount')))
@@ -1841,20 +1860,41 @@ class FeeViewSet(viewsets.ModelViewSet):
         if pay_amt <= 0:
             return Response({'detail': 'Amount must be greater than zero.'}, status=400)
 
-        remaining = fee.amount - fee.paid_amount
-        if pay_amt > remaining:
-            return Response({'detail': f'You can pay at most ₹{remaining:.0f}.'}, status=400)
+        # Remaining is computed from the PAYMENT ROWS, not from fee.paid_amount.
+        # Two people paying at once would otherwise both read the same stale
+        # total and between them could overpay the fee.
+        already_paid = fee.payments.aggregate(t=Sum('amount'))['t'] or Decimal('0')
+        remaining = fee.amount - already_paid
 
-        fee.paid_amount += pay_amt
-        if fee.paid_amount >= fee.amount:
-            fee.status = 'paid'
-            fee.paid_date = timezone.now().date()
-        else:
-            fee.status = 'partial'
-        fee.save()
+        if pay_amt > remaining:
+            return Response(
+                {'detail': f'You can pay at most {remaining:.0f}.'},
+                status=400,
+            )
+
+        # paid_by is whose money it was; recorded_by is who typed it in. They
+        # differ when the office records a counter payment.
+        payer = fee.student if request.user.role in ('admin', 'accounts_admin') else request.user
+
+        FeePayment.objects.create(
+            fee=fee,
+            amount=pay_amt,
+            paid_by=payer,
+            reference=(request.data.get('reference') or '').strip(),
+            remarks=(request.data.get('remarks') or '').strip(),
+            recorded_by=request.user,
+        )
+
+        # paid_amount / status / paid_date are refreshed by the post_save
+        # signal on FeePayment (models.py) - one recalculation, one place.
+        # `fee` here is a different Python object from the one the signal
+        # touched, so re-read it or the response shows pre-payment figures.
+        fee.refresh_from_db()
+
         return Response(FeeSerializer(fee).data)
 
 
+# ===================== GENERATE FEES (BULK) =====================
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def generate_fees(request):
@@ -1901,6 +1941,7 @@ def generate_fees(request):
         'created': created,
         'skipped': skipped,
     })
+
 
 # ===================== PARENT DASHBOARD =====================
 @api_view(['GET'])
