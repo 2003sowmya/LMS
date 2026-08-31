@@ -110,7 +110,6 @@ export default function Sidebar({ open, setOpen }) {
   else if (user.role === "admin" && subRole === "placement_officer") {
     menu = [
       { name: "Dashboard", path: "/placement" },
-      { name: "Students", path: "/placement/students" },
       { name: "Coordinators", path: "/placement/coordinators" },
       { name: "Companies", path: "/placement/companies" },
       { name: "Drives", path: "/placement/drives" },
