@@ -33,6 +33,8 @@ INSTALLED_APPS = [
     'events',
     'teachingplan',
     'placement',
+    "classgroups",
+    "mentoring",
 
     # Third-party
     'rest_framework',

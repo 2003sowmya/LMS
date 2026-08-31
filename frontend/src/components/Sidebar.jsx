@@ -17,7 +17,7 @@ export default function Sidebar({ open, setOpen }) {
   // ================= PLACEMENT COORDINATOR =================
   // Coordinator is an ASSIGNMENT, not a role, so it cannot be read from
   // localStorage like user.role can -- it has to be asked for. Same reason
-  // isHod and isTutor are fetched above.
+  // isHod and isTutor are fetched below.
   const [isPlacementCoordinator, setIsPlacementCoordinator] = useState(false);
 
   useEffect(() => {
@@ -131,12 +131,15 @@ export default function Sidebar({ open, setOpen }) {
         { name: "My Department", path: "/my-department" },
         { name: "Plan Approvals", path: "/my-department/teaching-plans" },
         { name: "Faculty Allocation", path: "/hod/allocation" },
+        { name: "Mentor Allocation", path: "/hod/mentor-allocation" },
       ] : []),
       ...(isTutor ? [{ name: "My Class", path: "/my-class" }] : []),
       // teachers get their OWN subjects page — /courses is the admin course editor
       { name: "My Subjects", path: "/teacher/courses" },
       { name: "Timetable", path: "/timetable" },
       { name: "My Teaching Plan", path: "/teacher/teaching-plan" },
+      { name: "My Mentees", path: "/my-mentees" },
+      { name: "My Groups", path: "/my-groups" },
       { name: "Attendance", path: "/teacher/attendance" },
       // shown only to a teacher who ALSO holds a coordinator assignment;
       // they keep every teaching menu above it
@@ -160,6 +163,8 @@ export default function Sidebar({ open, setOpen }) {
       { name: "Electives", path: "/student/electives" },
       { name: "Timetable", path: "/timetable" },
       { name: "Attendance", path: "/student/attendance" },
+      { name: "My Mentor", path: "/my-mentor" },
+      { name: "My Groups", path: "/my-groups" },
       { name: "Grades", path: "/student/grades" },
       { name: "Results", path: "/results" },
       { name: "My Progress", path: "/student-progress" },
