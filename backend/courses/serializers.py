@@ -112,7 +112,6 @@ class TeachingAssignmentSerializer(serializers.ModelSerializer):
 
 
 # ===================== ENROLLMENT =====================
-# ===================== ENROLLMENT =====================
 class EnrollmentSerializer(serializers.ModelSerializer):
 
     student_name = serializers.CharField(
