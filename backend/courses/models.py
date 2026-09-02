@@ -830,10 +830,7 @@ class Fee(models.Model):
 
 # ===================== FEE PAYMENT =====================
 class FeePayment(models.Model):
-    """
-    One payment made toward a Fee. These rows are the record of money
-    received; Fee.paid_amount is derived from them, never the reverse.
-    """
+   
     fee = models.ForeignKey(
         Fee, on_delete=models.CASCADE, related_name='payments'
     )
@@ -847,6 +844,9 @@ class FeePayment(models.Model):
     paid_on = models.DateField(default=timezone.localdate)
     reference = models.CharField(max_length=100, blank=True)
     remarks = models.TextField(blank=True)
+    gateway_payment_id = models.CharField(
+        max_length=100, unique=True, null=True, blank=True
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -980,3 +980,63 @@ def feepayment_saved(sender, instance, **kwargs):
 @receiver(post_delete, sender=FeePayment)
 def feepayment_deleted(sender, instance, **kwargs):
     instance.fee.recalculate()
+
+# ===================== PAYMENT TRANSACTION =====================
+class PaymentTransaction(models.Model):
+    """
+    One ATTEMPT to pay a Fee online. An attempt log, not money received.
+    Money received is still a FeePayment row. A FeePayment is created only
+    when a transaction reaches 'success' after the server verifies
+    Razorpay's signature.
+
+    Fines and revaluation charges are Fee rows too, so this one FK covers
+    every payable item in the system.
+    """
+
+    STATUS_CHOICES = [
+        ('created', 'Created'),
+        ('attempted', 'Attempted'),
+        ('success', 'Success'),
+        ('failed', 'Failed'),
+        ('refunded', 'Refunded'),
+    ]
+
+    fee = models.ForeignKey(
+        Fee, on_delete=models.CASCADE, related_name='transactions'
+    )
+    initiated_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name='payment_transactions'
+    )
+
+    # Rupees. Conversion to paise happens only at the API boundary.
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+
+    provider = models.CharField(max_length=20, default='razorpay')
+    gateway_order_id = models.CharField(max_length=100, unique=True)
+    gateway_payment_id = models.CharField(
+        max_length=100, blank=True, db_index=True
+    )
+    gateway_signature = models.CharField(max_length=200, blank=True)
+
+    status = models.CharField(
+        max_length=10, choices=STATUS_CHOICES, default='created'
+    )
+    failure_reason = models.TextField(blank=True)
+    raw_response = models.JSONField(default=dict, blank=True)
+
+    payment = models.OneToOneField(
+        FeePayment,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='transaction'
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at', '-id']
+
+    def __str__(self):
+        return f"{self.gateway_order_id} - {self.amount} ({self.status})"
