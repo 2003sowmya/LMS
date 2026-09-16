@@ -12,6 +12,12 @@ class Migration(migrations.Migration):
     is called created_at - a RenameField would try to rename a column it
     thinks already has the new name. state_operations is empty for the same
     reason: only the database needs correcting, not Django's picture of it.
+
+    CONDITIONAL because this repairs a drift that exists on ONE database.
+    A fresh database never has recorded_at - migration 0023 creates the
+    column as created_at - so an unconditional rename made the whole chain
+    unrunnable from scratch. That broke every deployment and every test run,
+    since the test runner builds a new database each time.
     """
 
     dependencies = [
@@ -20,7 +26,19 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.RunSQL(
-            sql="ALTER TABLE courses_feepayment RENAME COLUMN recorded_at TO created_at;",
-            reverse_sql="ALTER TABLE courses_feepayment RENAME COLUMN created_at TO recorded_at;",
+            sql="""
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'courses_feepayment'
+                      AND column_name = 'recorded_at'
+                ) THEN
+                    ALTER TABLE courses_feepayment
+                        RENAME COLUMN recorded_at TO created_at;
+                END IF;
+            END $$;
+            """,
+            reverse_sql=migrations.RunSQL.noop,
         ),
     ]
