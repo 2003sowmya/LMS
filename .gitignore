@@ -33,3 +33,6 @@ backend/DataBackup.backup
 frontend/src/pages - Shortcut.lnk
 backend/DataBackup.backup
 frontend/src/pages - Shortcut.lnk
+
+backend/new_students.csv
+backend/new_teachers.csv
