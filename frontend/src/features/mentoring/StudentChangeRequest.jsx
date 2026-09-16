@@ -85,7 +85,7 @@ export default function StudentChangeRequest() {
       return {
         cls: "ma-note amber",
         title: "This goes straight to the HOD",
-        body: "For this reason your class advisor is skipped entirely. " +
+        body: "For this reason Your class tutor is skipped entirely. " +
               "Only the HOD reads what you write.",
       };
     }
@@ -93,27 +93,27 @@ export default function StudentChangeRequest() {
       return {
         cls: "ma-note blue",
         title: "This goes straight to the HOD",
-        body: "Your department has the class advisor step turned off.",
+        body: "Your department has The class tutor step turned off.",
       };
     }
     if (!data.advisor) {
       return {
         cls: "ma-note blue",
         title: "This goes straight to the HOD",
-        body: "Your class has no class advisor assigned, so there is no advisor step.",
+        body: "Your class has no class tutor assigned, so there is no tutor step.",
       };
     }
     if (data.advisor.is_my_mentor) {
       return {
         cls: "ma-note amber",
         title: "This goes straight to the HOD",
-        body: `${data.advisor.name} is both your mentor and your class advisor, ` +
-              "so the advisor step is dropped. Nobody reviews a complaint about themselves.",
+        body: `${data.advisor.name} is both your mentor and Your class tutor, ` +
+              "so the tutor step is dropped. Nobody reviews a complaint about themselves.",
       };
     }
     return {
       cls: "ma-note blue",
-      title: "This goes to your class advisor first",
+      title: "This goes to Your class tutor first",
       body: `${data.advisor.name} will read it, add a note, and pass it to the HOD. ` +
             "Your current mentor is not told.",
     };
@@ -199,7 +199,7 @@ export default function StudentChangeRequest() {
             {open.is_confidential && (
               <div className="ma-note amber" style={{ marginBottom: 14 }}>
                 <b>Only the HOD can read this</b>
-                Your class advisor was skipped and {open.current_mentor_name} has
+                Your class tutor was skipped and {open.current_mentor_name} has
                 not been told that you asked.
               </div>
             )}
@@ -212,7 +212,7 @@ export default function StudentChangeRequest() {
             {open.advisor ? (
               <Step
                 state={open.status === "advisor" ? "now" : "done"}
-                title="Class advisor"
+                title="Class tutor"
                 sub={
                   open.status === "advisor"
                     ? `${open.advisor_name} is reviewing it`
@@ -222,7 +222,7 @@ export default function StudentChangeRequest() {
             ) : (
               <Step
                 state="skip"
-                title="Class advisor"
+                title="Class tutor"
                 sub="Skipped for this request"
               />
             )}
@@ -230,7 +230,7 @@ export default function StudentChangeRequest() {
             {/* the advisor writes this expecting the student to read it */}
             {open.advisor_note && (
               <div className="ma-why" style={{ marginLeft: 36, marginBottom: 18 }}>
-                <b>{open.advisor_name} — class advisor</b>
+                <b>{open.advisor_name} —class tutor</b>
                 <ul><li>{open.advisor_note}</li></ul>
               </div>
             )}
@@ -300,13 +300,13 @@ export default function StudentChangeRequest() {
             )}
             {last.status === "resolved" && (
               <div className="ma-note">
-                <b>Your class advisor resolved this without a change</b>
+                <b>Your class tutor resolved this without a change</b>
                 Your mentor stays as {last.current_mentor_name}.
               </div>
             )}
             {last.advisor_note && (
               <div className="ma-why">
-                <b>{last.advisor_name} — class advisor</b>
+                <b>{last.advisor_name} —class tutor</b>
                 <ul><li>{last.advisor_note}</li></ul>
               </div>
             )}
@@ -398,3 +398,5 @@ export default function StudentChangeRequest() {
     </>
   );
 }
+
+

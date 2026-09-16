@@ -636,6 +636,12 @@ class Notification(models.Model):
     created_at = models.DateTimeField(
         default=timezone.now
     )
+     # ---- email delivery ----
+        # Emails are sent by the send_notification_emails management command, not
+        # in the request that created the row. Creating 60 fees used to mean 60
+        # blocking SMTP round trips inside one HTTP request.
+    emailed_at = models.DateTimeField(null=True, blank=True)
+    email_attempts = models.PositiveSmallIntegerField(default=0)
 
     def __str__(self):
 
@@ -665,6 +671,7 @@ class DiscussionMessage(models.Model):
     created_at = models.DateTimeField(
         auto_now_add=True
     )
+       
 
     class Meta:
         ordering = ["created_at"]
@@ -830,11 +837,30 @@ class Fee(models.Model):
 
 # ===================== FEE PAYMENT =====================
 class FeePayment(models.Model):
-   
+
+    MODE_CHOICES = [
+        ('cash', 'Cash'),
+        ('upi', 'UPI'),
+        ('card', 'Card'),
+        ('cheque', 'Cheque'),
+        ('dd', 'Demand Draft'),
+        ('netbanking', 'Net banking'),
+        ('online', 'Online (gateway)'),
+    ]
+
     fee = models.ForeignKey(
         Fee, on_delete=models.CASCADE, related_name='payments'
     )
     amount = models.DecimalField(max_digits=10, decimal_places=2)
+
+    # How the money arrived. Defaults to cash because every payment recorded
+    # before this field existed was taken at the counter.
+    mode = models.CharField(max_length=12, choices=MODE_CHOICES, default='cash')
+
+    # Issued once in save(), never reused. Blank only on rows created before
+    # this field existed.
+    receipt_no = models.CharField(max_length=30, blank=True, db_index=True)
+
     paid_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name='fee_payments_made'
     )
@@ -854,6 +880,35 @@ class FeePayment(models.Model):
 
     def __str__(self):
         return f"{self.fee.student.username} - {self.amount} on {self.paid_on}"
+
+    def save(self, *args, **kwargs):
+        """
+        Issue a receipt number on first save and never change it afterwards.
+        Format: RCPT-<year>-<5 digits>, restarting each calendar year.
+
+        The sequence is read from the highest existing number rather than a
+        counter, so a deleted row does not shift every later receipt.
+        """
+        if not self.receipt_no:
+            year = timezone.localdate().year
+            prefix = f"RCPT-{year}-"
+            last = (
+                FeePayment.objects
+                .filter(receipt_no__startswith=prefix)
+                .order_by('-receipt_no')
+                .values_list('receipt_no', flat=True)
+                .first()
+            )
+            nxt = 1
+            if last:
+                try:
+                    nxt = int(last.rsplit('-', 1)[1]) + 1
+                except (IndexError, ValueError):
+                    nxt = FeePayment.objects.filter(
+                        receipt_no__startswith=prefix
+                    ).count() + 1
+            self.receipt_no = f"{prefix}{nxt:05d}"
+        super().save(*args, **kwargs)
     
 # ===================== PARENT MESSAGE =====================
 class ParentMessage(models.Model):
@@ -868,11 +923,11 @@ class ParentMessage(models.Model):
     created_at = models.DateTimeField(default=timezone.now)
 
     # Which relationship this message belongs to. Two people who hold two
-    # roles (mentor AND class advisor) get two separate threads, so a
-    # mentoring conversation never surfaces on the class advisor's page.
+    # roles (mentor AND tutor) get two separate threads, so a
+    # mentoring conversation never surfaces on the tutor's page.
     CONTEXT_CHOICES = (
         ("mentor", "Mentor and mentee"),
-        ("advisor", "Class advisor and student"),
+        ("advisor", "Tutor and student"),
         ("parent", "Teacher and parent"),
         ("general", "Uncategorised"),
     )
@@ -907,7 +962,7 @@ class ConversationMessage(models.Model):
 
     CONTEXT_CHOICES = (
         ("mentor", "Mentor and mentee"),
-        ("advisor", "Class advisor and student"),
+        ("advisor", "Tutor and student"),
         ("parent", "Teacher and parent"),
         ("general", "Uncategorised"),
     )
@@ -934,7 +989,7 @@ class ConversationMessage(models.Model):
     
 # ===================== YEAR TUTOR =====================
 class YearTutor(models.Model):
-    """One tutor (class advisor) per year of a course. No sections."""
+    """One tutor per year of a course. No sections."""
     teacher = models.ForeignKey(
         User,
         on_delete=models.CASCADE,

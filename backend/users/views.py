@@ -935,6 +935,28 @@ def hod_assign_tutor(request):
     if YearTutor.objects.filter(year_id=year_id).exists():
         return Response({"detail": "This year already has a tutor. Remove the existing one first."}, status=400)
 
+    # One class per teacher. mentoring.resolve_advisor_class takes .first() on
+    # this teacher's YearTutor rows, so a second class would be silently
+    # unreachable — every mentoring screen would show them the first one only,
+    # with no hint the other existed.
+    existing = (
+        YearTutor.objects
+        .filter(teacher_id=teacher_id)
+        .select_related("course", "year")
+        .first()
+    )
+    if existing:
+        return Response(
+            {
+                "detail": (
+                    f"That teacher already tutors {existing.course.name} "
+                    f"Year {existing.year.year_number}. A teacher can tutor one "
+                    "class at a time — remove that assignment first."
+                )
+            },
+            status=400,
+        )
+
     try:
         course = Course.objects.get(id=course_id)
         year = Year.objects.get(id=year_id)

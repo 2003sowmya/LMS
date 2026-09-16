@@ -1,0 +1,174 @@
+roll_number,username,name,email,password,department,course,year,semester,batch_year,enrolments
+26CE001,aarthi.ramesh,Aarthi Ramesh,aarthi.ramesh@college.test,gVaDEE2i4i,Civil,B.E Civil,1,1,2026,12
+26CE002,bala.ramesh,Bala Ramesh,bala.ramesh@college.test,riNKqshJOk,Civil,B.E Civil,1,1,2026,12
+26CE003,chitra.ramesh,Chitra Ramesh,chitra.ramesh@college.test,UVJGm2hzZp,Civil,B.E Civil,1,1,2026,12
+26CE004,dinesh.ramesh,Dinesh Ramesh,dinesh.ramesh@college.test,0DrBk9Ri47,Civil,B.E Civil,1,1,2026,12
+26CE005,elango.ramesh,Elango Ramesh,elango.ramesh@college.test,PcyNgKHogc,Civil,B.E Civil,1,1,2026,12
+26CE006,fathima.ramesh,Fathima Ramesh,fathima.ramesh@college.test,Ja1wMRpQgl,Civil,B.E Civil,1,1,2026,12
+26CE007,gokul.ramesh,Gokul Ramesh,gokul.ramesh@college.test,sh98Q5gKwW,Civil,B.E Civil,1,1,2026,12
+26CE008,hema.ramesh,Hema Ramesh,hema.ramesh@college.test,ZZmuscKotD,Civil,B.E Civil,1,1,2026,12
+26CE009,ilango.ramesh,Ilango Ramesh,ilango.ramesh@college.test,s1dk8ujyA5,Civil,B.E Civil,1,1,2026,12
+26CE010,janani.ramesh,Janani Ramesh,janani.ramesh@college.test,YEhP8WbV3V,Civil,B.E Civil,1,1,2026,12
+24CE001,karthik.ramesh,Karthik Ramesh,karthik.ramesh@college.test,iDyhkbzRQB,Civil,B.E Civil,3,5,2024,6
+24CE002,lakshmi.ramesh,Lakshmi Ramesh,lakshmi.ramesh@college.test,awGPDvFVRY,Civil,B.E Civil,3,5,2024,6
+24CE003,manoj.ramesh,Manoj Ramesh,manoj.ramesh@college.test,SrHK1PsKE8,Civil,B.E Civil,3,5,2024,6
+24CE004,nithya.ramesh,Nithya Ramesh,nithya.ramesh@college.test,WRuFGRWUde,Civil,B.E Civil,3,5,2024,6
+24CE005,oviya.ramesh,Oviya Ramesh,oviya.ramesh@college.test,4NePLbGbHM,Civil,B.E Civil,3,5,2024,6
+24CE006,prakash.ramesh,Prakash Ramesh,prakash.ramesh@college.test,ClWAc7fcua,Civil,B.E Civil,3,5,2024,6
+24CE007,ranjith.ramesh,Ranjith Ramesh,ranjith.ramesh@college.test,DpOyKI51s0,Civil,B.E Civil,3,5,2024,6
+24CE008,sowmya.ramesh,Sowmya Ramesh,sowmya.ramesh@college.test,b501CApTzF,Civil,B.E Civil,3,5,2024,6
+24CE009,tamilselvan.ramesh,Tamilselvan Ramesh,tamilselvan.ramesh@college.test,6P8z9udcJo,Civil,B.E Civil,3,5,2024,6
+24CE010,uma.ramesh,Uma Ramesh,uma.ramesh@college.test,PjSwXyNCKu,Civil,B.E Civil,3,5,2024,6
+23CE001,vignesh.ramesh,Vignesh Ramesh,vignesh.ramesh@college.test,k2c3ifJMQv,Civil,B.E Civil,4,7,2023,6
+23CE002,yazhini.ramesh,Yazhini Ramesh,yazhini.ramesh@college.test,9rbn3gLYSq,Civil,B.E Civil,4,7,2023,6
+23CE003,anitha.ramesh,Anitha Ramesh,anitha.ramesh@college.test,XLccNY2V8T,Civil,B.E Civil,4,7,2023,6
+23CE004,bharath.ramesh,Bharath Ramesh,bharath.ramesh@college.test,kSOOIC5EmU,Civil,B.E Civil,4,7,2023,6
+23CE005,deepa.ramesh,Deepa Ramesh,deepa.ramesh@college.test,QmTWA5zA5g,Civil,B.E Civil,4,7,2023,6
+23CE006,ezhil.ramesh,Ezhil Ramesh,ezhil.ramesh@college.test,HVuKneNZSm,Civil,B.E Civil,4,7,2023,6
+23CE007,gayathri.ramesh,Gayathri Ramesh,gayathri.ramesh@college.test,wboOWxSzDv,Civil,B.E Civil,4,7,2023,6
+23CE008,harish.ramesh,Harish Ramesh,harish.ramesh@college.test,k1qhRbOgi0,Civil,B.E Civil,4,7,2023,6
+23CE009,indhu.ramesh,Indhu Ramesh,indhu.ramesh@college.test,nZ9f7Azgxm,Civil,B.E Civil,4,7,2023,6
+23CE010,jeeva.ramesh,Jeeva Ramesh,jeeva.ramesh@college.test,bNxGsOzais,Civil,B.E Civil,4,7,2023,6
+25CS001,kavya.ramesh,Kavya Ramesh,kavya.ramesh@college.test,gqlBiph90b,Computer Science,B.E Computer Science,2,3,2025,6
+25CS002,logesh.ramesh,Logesh Ramesh,logesh.ramesh@college.test,jzxgZIa163,Computer Science,B.E Computer Science,2,3,2025,6
+25CS003,meena.ramesh,Meena Ramesh,meena.ramesh@college.test,GWUINbWdBW,Computer Science,B.E Computer Science,2,3,2025,6
+25CS004,naveen.ramesh,Naveen Ramesh,naveen.ramesh@college.test,FBfrF15JEh,Computer Science,B.E Computer Science,2,3,2025,6
+25CS005,pavithra.ramesh,Pavithra Ramesh,pavithra.ramesh@college.test,VHNSq2wDsN,Computer Science,B.E Computer Science,2,3,2025,6
+25CS006,rajesh.ramesh,Rajesh Ramesh,rajesh.ramesh@college.test,KOWa5j6h4A,Computer Science,B.E Computer Science,2,3,2025,6
+25CS007,sangeetha.ramesh,Sangeetha Ramesh,sangeetha.ramesh@college.test,JYnY4yo6x7,Computer Science,B.E Computer Science,2,3,2025,6
+25CS008,tharun.ramesh,Tharun Ramesh,tharun.ramesh@college.test,Nkh5c0mr1h,Computer Science,B.E Computer Science,2,3,2025,6
+25CS009,vidya.ramesh,Vidya Ramesh,vidya.ramesh@college.test,EokIx8rHhf,Computer Science,B.E Computer Science,2,3,2025,6
+25CS010,yuvaraj.ramesh,Yuvaraj Ramesh,yuvaraj.ramesh@college.test,JvKkaxyvLp,Computer Science,B.E Computer Science,2,3,2025,6
+24CS001,abinaya.ramesh,Abinaya Ramesh,abinaya.ramesh@college.test,HH5viJxmSi,Computer Science,B.E Computer Science,3,5,2024,6
+24CS002,barath.ramesh,Barath Ramesh,barath.ramesh@college.test,Qw6Vkj5ddp,Computer Science,B.E Computer Science,3,5,2024,6
+24CS003,divya.ramesh,Divya Ramesh,divya.ramesh@college.test,h0X4YBfoOj,Computer Science,B.E Computer Science,3,5,2024,6
+24CS004,guhan.ramesh,Guhan Ramesh,guhan.ramesh@college.test,PC1nPANgUi,Computer Science,B.E Computer Science,3,5,2024,6
+24CS005,ilakkiya.ramesh,Ilakkiya Ramesh,ilakkiya.ramesh@college.test,kPViB0YJxd,Computer Science,B.E Computer Science,3,5,2024,6
+24CS006,jagan.ramesh,Jagan Ramesh,jagan.ramesh@college.test,dBF9VcoqHm,Computer Science,B.E Computer Science,3,5,2024,6
+24CS007,keerthana.ramesh,Keerthana Ramesh,keerthana.ramesh@college.test,vuId1UbV2J,Computer Science,B.E Computer Science,3,5,2024,6
+24CS008,mithun.ramesh,Mithun Ramesh,mithun.ramesh@college.test,vF2jMVIXxH,Computer Science,B.E Computer Science,3,5,2024,6
+24CS009,nandhini.ramesh,Nandhini Ramesh,nandhini.ramesh@college.test,qZ6HdTNPIG,Computer Science,B.E Computer Science,3,5,2024,6
+24CS010,poornima.ramesh,Poornima Ramesh,poornima.ramesh@college.test,njRfHjpjCs,Computer Science,B.E Computer Science,3,5,2024,6
+23CS001,aarthi.kumar,Aarthi Kumar,aarthi.kumar@college.test,CMLNmse2MJ,Computer Science,B.E Computer Science,4,7,2023,6
+23CS002,bala.kumar,Bala Kumar,bala.kumar@college.test,oBAEivSEFP,Computer Science,B.E Computer Science,4,7,2023,6
+23CS003,chitra.kumar,Chitra Kumar,chitra.kumar@college.test,aB2OLOlYGM,Computer Science,B.E Computer Science,4,7,2023,6
+23CS004,dinesh.kumar,Dinesh Kumar,dinesh.kumar@college.test,rwZXKW3IMx,Computer Science,B.E Computer Science,4,7,2023,6
+23CS005,elango.kumar,Elango Kumar,elango.kumar@college.test,ZtvheLla2l,Computer Science,B.E Computer Science,4,7,2023,6
+23CS006,fathima.kumar,Fathima Kumar,fathima.kumar@college.test,Hy3PK9smxZ,Computer Science,B.E Computer Science,4,7,2023,6
+23CS007,gokul.kumar,Gokul Kumar,gokul.kumar@college.test,l5QdgHe0p1,Computer Science,B.E Computer Science,4,7,2023,6
+23CS008,hema.kumar,Hema Kumar,hema.kumar@college.test,vpDUe6GFpU,Computer Science,B.E Computer Science,4,7,2023,6
+23CS009,ilango.kumar,Ilango Kumar,ilango.kumar@college.test,IwCglZIrjr,Computer Science,B.E Computer Science,4,7,2023,6
+23CS010,janani.kumar,Janani Kumar,janani.kumar@college.test,q3EqXRaFcU,Computer Science,B.E Computer Science,4,7,2023,6
+25EEE001,karthik.kumar,Karthik Kumar,karthik.kumar@college.test,JGVgW89uHu,Electrical and Electronics,B.E EEE,2,3,2025,6
+25EEE002,lakshmi.kumar,Lakshmi Kumar,lakshmi.kumar@college.test,6xVBAiD7iJ,Electrical and Electronics,B.E EEE,2,3,2025,6
+25EEE003,manoj.kumar,Manoj Kumar,manoj.kumar@college.test,s5zKZA3lBQ,Electrical and Electronics,B.E EEE,2,3,2025,6
+25EEE004,nithya.kumar,Nithya Kumar,nithya.kumar@college.test,olXHKBXBXN,Electrical and Electronics,B.E EEE,2,3,2025,6
+25EEE005,oviya.kumar,Oviya Kumar,oviya.kumar@college.test,0taM5dmWvN,Electrical and Electronics,B.E EEE,2,3,2025,6
+25EEE006,prakash.kumar,Prakash Kumar,prakash.kumar@college.test,VRQEQgHhQM,Electrical and Electronics,B.E EEE,2,3,2025,6
+25EEE007,ranjith.kumar,Ranjith Kumar,ranjith.kumar@college.test,hrLrNg5wDq,Electrical and Electronics,B.E EEE,2,3,2025,6
+25EEE008,sowmya.kumar,Sowmya Kumar,sowmya.kumar@college.test,tCIBv4zA1O,Electrical and Electronics,B.E EEE,2,3,2025,6
+25EEE009,tamilselvan.kumar,Tamilselvan Kumar,tamilselvan.kumar@college.test,DwGX7S1Awa,Electrical and Electronics,B.E EEE,2,3,2025,6
+25EEE010,uma.kumar,Uma Kumar,uma.kumar@college.test,TDYtQFwJkL,Electrical and Electronics,B.E EEE,2,3,2025,6
+24EEE001,vignesh.kumar,Vignesh Kumar,vignesh.kumar@college.test,AZW8YNaC2v,Electrical and Electronics,B.E EEE,3,5,2024,6
+24EEE002,yazhini.kumar,Yazhini Kumar,yazhini.kumar@college.test,JNvmDAZezk,Electrical and Electronics,B.E EEE,3,5,2024,6
+24EEE003,anitha.kumar,Anitha Kumar,anitha.kumar@college.test,1ROkyE2vE7,Electrical and Electronics,B.E EEE,3,5,2024,6
+24EEE004,bharath.kumar,Bharath Kumar,bharath.kumar@college.test,uNaHHS0g88,Electrical and Electronics,B.E EEE,3,5,2024,6
+24EEE005,deepa.kumar,Deepa Kumar,deepa.kumar@college.test,thnYgEAQnt,Electrical and Electronics,B.E EEE,3,5,2024,6
+24EEE006,ezhil.kumar,Ezhil Kumar,ezhil.kumar@college.test,CeugUedAwL,Electrical and Electronics,B.E EEE,3,5,2024,6
+24EEE007,gayathri.kumar,Gayathri Kumar,gayathri.kumar@college.test,DHxmFX9cQt,Electrical and Electronics,B.E EEE,3,5,2024,6
+24EEE008,harish.kumar,Harish Kumar,harish.kumar@college.test,Lrwdt91Hp9,Electrical and Electronics,B.E EEE,3,5,2024,6
+24EEE009,indhu.kumar,Indhu Kumar,indhu.kumar@college.test,n0E1CFBfhE,Electrical and Electronics,B.E EEE,3,5,2024,6
+24EEE010,jeeva.kumar,Jeeva Kumar,jeeva.kumar@college.test,v3wJOJoW0Y,Electrical and Electronics,B.E EEE,3,5,2024,6
+23EEE001,kavya.kumar,Kavya Kumar,kavya.kumar@college.test,fhCtoVW5nq,Electrical and Electronics,B.E EEE,4,7,2023,6
+23EEE002,logesh.kumar,Logesh Kumar,logesh.kumar@college.test,au8yyDpZ3y,Electrical and Electronics,B.E EEE,4,7,2023,6
+23EEE003,meena.kumar,Meena Kumar,meena.kumar@college.test,hSLUTgQ1hB,Electrical and Electronics,B.E EEE,4,7,2023,6
+23EEE004,naveen.kumar,Naveen Kumar,naveen.kumar@college.test,9f45OJAMiF,Electrical and Electronics,B.E EEE,4,7,2023,6
+23EEE005,pavithra.kumar,Pavithra Kumar,pavithra.kumar@college.test,NRT5Wh6ebM,Electrical and Electronics,B.E EEE,4,7,2023,6
+23EEE006,rajesh.kumar,Rajesh Kumar,rajesh.kumar@college.test,Ckj7YGkssW,Electrical and Electronics,B.E EEE,4,7,2023,6
+23EEE007,sangeetha.kumar,Sangeetha Kumar,sangeetha.kumar@college.test,rOTY2fSdZR,Electrical and Electronics,B.E EEE,4,7,2023,6
+23EEE008,tharun.kumar,Tharun Kumar,tharun.kumar@college.test,tHSxN9vwji,Electrical and Electronics,B.E EEE,4,7,2023,6
+23EEE009,vidya.kumar,Vidya Kumar,vidya.kumar@college.test,SYqcjvQrSo,Electrical and Electronics,B.E EEE,4,7,2023,6
+23EEE010,yuvaraj.kumar,Yuvaraj Kumar,yuvaraj.kumar@college.test,Aarjd5XE7P,Electrical and Electronics,B.E EEE,4,7,2023,6
+25ECE001,abinaya.kumar,Abinaya Kumar,abinaya.kumar@college.test,gU5MwCGKI7,Electronics and Communication,B.E Electronics and Communication,2,3,2025,6
+25ECE002,barath.kumar,Barath Kumar,barath.kumar@college.test,syHiYOE3Mb,Electronics and Communication,B.E Electronics and Communication,2,3,2025,6
+25ECE003,divya.kumar,Divya Kumar,divya.kumar@college.test,mt41Koej7s,Electronics and Communication,B.E Electronics and Communication,2,3,2025,6
+25ECE004,guhan.kumar,Guhan Kumar,guhan.kumar@college.test,bpmQhgmjhF,Electronics and Communication,B.E Electronics and Communication,2,3,2025,6
+25ECE005,ilakkiya.kumar,Ilakkiya Kumar,ilakkiya.kumar@college.test,OUQNp5slAy,Electronics and Communication,B.E Electronics and Communication,2,3,2025,6
+25ECE006,jagan.kumar,Jagan Kumar,jagan.kumar@college.test,5l6Z0cqbr6,Electronics and Communication,B.E Electronics and Communication,2,3,2025,6
+25ECE007,keerthana.kumar,Keerthana Kumar,keerthana.kumar@college.test,dtcqUwCw5T,Electronics and Communication,B.E Electronics and Communication,2,3,2025,6
+25ECE008,mithun.kumar,Mithun Kumar,mithun.kumar@college.test,toxf5nCU3V,Electronics and Communication,B.E Electronics and Communication,2,3,2025,6
+25ECE009,nandhini.kumar,Nandhini Kumar,nandhini.kumar@college.test,M3avuyMkbN,Electronics and Communication,B.E Electronics and Communication,2,3,2025,6
+25ECE010,poornima.kumar,Poornima Kumar,poornima.kumar@college.test,cdijX02Hcp,Electronics and Communication,B.E Electronics and Communication,2,3,2025,6
+24ECE001,aarthi.selvam,Aarthi Selvam,aarthi.selvam@college.test,AJe5HAptfX,Electronics and Communication,B.E Electronics and Communication,3,5,2024,6
+24ECE002,bala.selvam,Bala Selvam,bala.selvam@college.test,YuX5NCekyg,Electronics and Communication,B.E Electronics and Communication,3,5,2024,6
+24ECE003,chitra.selvam,Chitra Selvam,chitra.selvam@college.test,Ci5oaTiJVf,Electronics and Communication,B.E Electronics and Communication,3,5,2024,6
+24ECE004,dinesh.selvam,Dinesh Selvam,dinesh.selvam@college.test,Kx5kRuGglF,Electronics and Communication,B.E Electronics and Communication,3,5,2024,6
+24ECE005,elango.selvam,Elango Selvam,elango.selvam@college.test,RJBUECzFp4,Electronics and Communication,B.E Electronics and Communication,3,5,2024,6
+24ECE006,fathima.selvam,Fathima Selvam,fathima.selvam@college.test,otevOsiorY,Electronics and Communication,B.E Electronics and Communication,3,5,2024,6
+24ECE007,gokul.selvam,Gokul Selvam,gokul.selvam@college.test,9kAX0VIuky,Electronics and Communication,B.E Electronics and Communication,3,5,2024,6
+24ECE008,hema.selvam,Hema Selvam,hema.selvam@college.test,NA3f3R7UJU,Electronics and Communication,B.E Electronics and Communication,3,5,2024,6
+24ECE009,ilango.selvam,Ilango Selvam,ilango.selvam@college.test,8Il3lUlBFc,Electronics and Communication,B.E Electronics and Communication,3,5,2024,6
+24ECE010,janani.selvam,Janani Selvam,janani.selvam@college.test,JrBpFfcALe,Electronics and Communication,B.E Electronics and Communication,3,5,2024,6
+23ECE001,karthik.selvam,Karthik Selvam,karthik.selvam@college.test,lptf3BizHe,Electronics and Communication,B.E Electronics and Communication,4,7,2023,6
+23ECE002,lakshmi.selvam,Lakshmi Selvam,lakshmi.selvam@college.test,Qvwd6UCpqo,Electronics and Communication,B.E Electronics and Communication,4,7,2023,6
+23ECE003,manoj.selvam,Manoj Selvam,manoj.selvam@college.test,rBSIt5ay1e,Electronics and Communication,B.E Electronics and Communication,4,7,2023,6
+23ECE004,nithya.selvam,Nithya Selvam,nithya.selvam@college.test,McOMColfJ4,Electronics and Communication,B.E Electronics and Communication,4,7,2023,6
+23ECE005,oviya.selvam,Oviya Selvam,oviya.selvam@college.test,wYmRAxynaQ,Electronics and Communication,B.E Electronics and Communication,4,7,2023,6
+23ECE006,prakash.selvam,Prakash Selvam,prakash.selvam@college.test,hiWPF6U94d,Electronics and Communication,B.E Electronics and Communication,4,7,2023,6
+23ECE007,ranjith.selvam,Ranjith Selvam,ranjith.selvam@college.test,RfdnTkN7S8,Electronics and Communication,B.E Electronics and Communication,4,7,2023,6
+23ECE008,sowmya.selvam,Sowmya Selvam,sowmya.selvam@college.test,XjskRKXZVJ,Electronics and Communication,B.E Electronics and Communication,4,7,2023,6
+23ECE009,tamilselvan.selvam,Tamilselvan Selvam,tamilselvan.selvam@college.test,8VfPySrlTd,Electronics and Communication,B.E Electronics and Communication,4,7,2023,6
+23ECE010,uma.selvam,Uma Selvam,uma.selvam@college.test,PBFbTcB8im,Electronics and Communication,B.E Electronics and Communication,4,7,2023,6
+25ME008,vignesh.selvam,Vignesh Selvam,vignesh.selvam@college.test,FsD2Pzbe1S,Mechanical,B.E Mechanical,2,4,2025,6
+25ME009,yazhini.selvam,Yazhini Selvam,yazhini.selvam@college.test,XNumlKGZCU,Mechanical,B.E Mechanical,2,4,2025,6
+25ME010,anitha.selvam,Anitha Selvam,anitha.selvam@college.test,WWPSfJyXgj,Mechanical,B.E Mechanical,2,4,2025,6
+24ME001,bharath.selvam,Bharath Selvam,bharath.selvam@college.test,2JbuHPASk2,Mechanical,B.E Mechanical,3,5,2024,6
+24ME002,deepa.selvam,Deepa Selvam,deepa.selvam@college.test,URn2VI6Y4m,Mechanical,B.E Mechanical,3,5,2024,6
+24ME003,ezhil.selvam,Ezhil Selvam,ezhil.selvam@college.test,TkQdgBulqf,Mechanical,B.E Mechanical,3,5,2024,6
+24ME004,gayathri.selvam,Gayathri Selvam,gayathri.selvam@college.test,gXgYWzmnNU,Mechanical,B.E Mechanical,3,5,2024,6
+24ME005,harish.selvam,Harish Selvam,harish.selvam@college.test,dkYrVkNryE,Mechanical,B.E Mechanical,3,5,2024,6
+24ME006,indhu.selvam,Indhu Selvam,indhu.selvam@college.test,YHvGuwdJCH,Mechanical,B.E Mechanical,3,5,2024,6
+24ME007,jeeva.selvam,Jeeva Selvam,jeeva.selvam@college.test,kaOhLiXB4g,Mechanical,B.E Mechanical,3,5,2024,6
+24ME008,kavya.selvam,Kavya Selvam,kavya.selvam@college.test,J2wrqChziB,Mechanical,B.E Mechanical,3,5,2024,6
+24ME009,logesh.selvam,Logesh Selvam,logesh.selvam@college.test,i5cWSCYKsS,Mechanical,B.E Mechanical,3,5,2024,6
+24ME010,meena.selvam,Meena Selvam,meena.selvam@college.test,6Zc3LM6Zki,Mechanical,B.E Mechanical,3,5,2024,6
+23ME001,naveen.selvam,Naveen Selvam,naveen.selvam@college.test,IsB4sPYCK5,Mechanical,B.E Mechanical,4,7,2023,6
+23ME002,pavithra.selvam,Pavithra Selvam,pavithra.selvam@college.test,rU325fHRT0,Mechanical,B.E Mechanical,4,7,2023,6
+23ME003,rajesh.selvam,Rajesh Selvam,rajesh.selvam@college.test,yCMUNPsFdq,Mechanical,B.E Mechanical,4,7,2023,6
+23ME004,sangeetha.selvam,Sangeetha Selvam,sangeetha.selvam@college.test,Sn9w2vWp98,Mechanical,B.E Mechanical,4,7,2023,6
+23ME005,tharun.selvam,Tharun Selvam,tharun.selvam@college.test,0agJaIR0pa,Mechanical,B.E Mechanical,4,7,2023,6
+23ME006,vidya.selvam,Vidya Selvam,vidya.selvam@college.test,hNlrOb8suO,Mechanical,B.E Mechanical,4,7,2023,6
+23ME007,yuvaraj.selvam,Yuvaraj Selvam,yuvaraj.selvam@college.test,eqFFxlyRJS,Mechanical,B.E Mechanical,4,7,2023,6
+23ME008,abinaya.selvam,Abinaya Selvam,abinaya.selvam@college.test,i6gKmxBuR8,Mechanical,B.E Mechanical,4,7,2023,6
+23ME009,barath.selvam,Barath Selvam,barath.selvam@college.test,mRM4fCr5Nz,Mechanical,B.E Mechanical,4,7,2023,6
+23ME010,divya.selvam,Divya Selvam,divya.selvam@college.test,A6bOcGv3jD,Mechanical,B.E Mechanical,4,7,2023,6
+25IT001,guhan.selvam,Guhan Selvam,guhan.selvam@college.test,YJdjIBFeCl,Information Technology,B.Tech Information Technology,2,3,2025,6
+25IT002,ilakkiya.selvam,Ilakkiya Selvam,ilakkiya.selvam@college.test,XiwxijSS0D,Information Technology,B.Tech Information Technology,2,3,2025,6
+25IT003,jagan.selvam,Jagan Selvam,jagan.selvam@college.test,ZNURafP18s,Information Technology,B.Tech Information Technology,2,3,2025,6
+25IT004,keerthana.selvam,Keerthana Selvam,keerthana.selvam@college.test,eRWETFstJ4,Information Technology,B.Tech Information Technology,2,3,2025,6
+25IT005,mithun.selvam,Mithun Selvam,mithun.selvam@college.test,amceNvds2g,Information Technology,B.Tech Information Technology,2,3,2025,6
+25IT006,nandhini.selvam,Nandhini Selvam,nandhini.selvam@college.test,J5mPINnLFg,Information Technology,B.Tech Information Technology,2,3,2025,6
+25IT007,poornima.selvam,Poornima Selvam,poornima.selvam@college.test,7qc6vaybSS,Information Technology,B.Tech Information Technology,2,3,2025,6
+25IT008,aarthi.murugan,Aarthi Murugan,aarthi.murugan@college.test,vz8z19TSd0,Information Technology,B.Tech Information Technology,2,3,2025,6
+25IT009,bala.murugan,Bala Murugan,bala.murugan@college.test,aT7dmomD77,Information Technology,B.Tech Information Technology,2,3,2025,6
+25IT010,chitra.murugan,Chitra Murugan,chitra.murugan@college.test,1ISVCBjbGE,Information Technology,B.Tech Information Technology,2,3,2025,6
+24IT001,dinesh.murugan,Dinesh Murugan,dinesh.murugan@college.test,hVctwWTUlA,Information Technology,B.Tech Information Technology,3,5,2024,6
+24IT002,elango.murugan,Elango Murugan,elango.murugan@college.test,FdXIgWITnh,Information Technology,B.Tech Information Technology,3,5,2024,6
+24IT003,fathima.murugan,Fathima Murugan,fathima.murugan@college.test,Fk6epG8J23,Information Technology,B.Tech Information Technology,3,5,2024,6
+24IT004,gokul.murugan,Gokul Murugan,gokul.murugan@college.test,HkBr1lTHC3,Information Technology,B.Tech Information Technology,3,5,2024,6
+24IT005,hema.murugan,Hema Murugan,hema.murugan@college.test,HsnIhnoCXW,Information Technology,B.Tech Information Technology,3,5,2024,6
+24IT006,ilango.murugan,Ilango Murugan,ilango.murugan@college.test,WX6oBXM3IO,Information Technology,B.Tech Information Technology,3,5,2024,6
+24IT007,janani.murugan,Janani Murugan,janani.murugan@college.test,vvjjoTSCAK,Information Technology,B.Tech Information Technology,3,5,2024,6
+24IT008,karthik.murugan,Karthik Murugan,karthik.murugan@college.test,kDzD16IvpC,Information Technology,B.Tech Information Technology,3,5,2024,6
+24IT009,lakshmi.murugan,Lakshmi Murugan,lakshmi.murugan@college.test,qPqIjMNWCm,Information Technology,B.Tech Information Technology,3,5,2024,6
+24IT010,manoj.murugan,Manoj Murugan,manoj.murugan@college.test,diK2RgajGn,Information Technology,B.Tech Information Technology,3,5,2024,6
+23IT001,nithya.murugan,Nithya Murugan,nithya.murugan@college.test,RML6OmB6Kg,Information Technology,B.Tech Information Technology,4,7,2023,6
+23IT002,oviya.murugan,Oviya Murugan,oviya.murugan@college.test,ciylRTjs4G,Information Technology,B.Tech Information Technology,4,7,2023,6
+23IT003,prakash.murugan,Prakash Murugan,prakash.murugan@college.test,aMoC7tzwE4,Information Technology,B.Tech Information Technology,4,7,2023,6
+23IT004,ranjith.murugan,Ranjith Murugan,ranjith.murugan@college.test,2jgeNbXucd,Information Technology,B.Tech Information Technology,4,7,2023,6
+23IT005,sowmya.murugan,Sowmya Murugan,sowmya.murugan@college.test,fmFaSWHjyH,Information Technology,B.Tech Information Technology,4,7,2023,6
+23IT006,tamilselvan.murugan,Tamilselvan Murugan,tamilselvan.murugan@college.test,9oCTdSG6VY,Information Technology,B.Tech Information Technology,4,7,2023,6
+23IT007,uma.murugan,Uma Murugan,uma.murugan@college.test,wmXoB9MDaH,Information Technology,B.Tech Information Technology,4,7,2023,6
+23IT008,vignesh.murugan,Vignesh Murugan,vignesh.murugan@college.test,GnCITb6s9O,Information Technology,B.Tech Information Technology,4,7,2023,6
+23IT009,yazhini.murugan,Yazhini Murugan,yazhini.murugan@college.test,3G2odODdyT,Information Technology,B.Tech Information Technology,4,7,2023,6
+23IT010,anitha.murugan,Anitha Murugan,anitha.murugan@college.test,3lJbUQHQr4,Information Technology,B.Tech Information Technology,4,7,2023,6

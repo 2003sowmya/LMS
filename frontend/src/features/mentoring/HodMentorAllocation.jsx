@@ -58,6 +58,9 @@ export default function HodMentorAllocation() {
   const [preview, setPreview] = useState(null);
   const [why, setWhy] = useState(null);
 
+  // capacity is reference material, not the task. Closed until asked for.
+  const [showCapacity, setShowCapacity] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -82,33 +85,30 @@ export default function HodMentorAllocation() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const loadAll = useCallback(
-    async (ay, f) => {
-      if (!ay) return;
-      setLoading(true);
-      setError("");
-      try {
-        const [alloc, props] = await Promise.all([
-          getAllocations({ ...f, academic_year: ay }),
-          getProposals({ academic_year: ay }),
-        ]);
-        setRows(alloc.results || []);
-        setMentors(alloc.mentors || []);
-        setDepartment(alloc.department?.name || "");
-        setBatches(props.batches || []);
-        setPool(props.pool || null);
-      } catch (err) {
-        setError(errorText(err, "Could not load allocations."));
-        setRows([]);
-        setMentors([]);
-        setBatches([]);
-        setPool(null);
-      } finally {
-        setLoading(false);
-      }
-    },
-    []
-  );
+  const loadAll = useCallback(async (ay, f) => {
+    if (!ay) return;
+    setLoading(true);
+    setError("");
+    try {
+      const [alloc, props] = await Promise.all([
+        getAllocations({ ...f, academic_year: ay }),
+        getProposals({ academic_year: ay }),
+      ]);
+      setRows(alloc.results || []);
+      setMentors(alloc.mentors || []);
+      setDepartment(alloc.department?.name || "");
+      setBatches(props.batches || []);
+      setPool(props.pool || null);
+    } catch (err) {
+      setError(errorText(err, "Could not load allocations."));
+      setRows([]);
+      setMentors([]);
+      setBatches([]);
+      setPool(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     loadOptions();
@@ -138,6 +138,11 @@ export default function HodMentorAllocation() {
     return { active, pending, none, total: rows.length };
   }, [rows]);
 
+  const proposalStudents = useMemo(
+    () => batches.reduce((n, b) => n + (b.count || 0), 0),
+    [batches]
+  );
+
   const selectedIds = useMemo(
     () => Object.keys(selected).filter((k) => selected[k]).map(Number),
     [selected]
@@ -148,8 +153,7 @@ export default function HodMentorAllocation() {
     [rows, selected]
   );
 
-  const toggleOne = (id) =>
-    setSelected((prev) => ({ ...prev, [id]: !prev[id] }));
+  const toggleOne = (id) => setSelected((prev) => ({ ...prev, [id]: !prev[id] }));
 
   const toggleAll = () => {
     const all = rows.length > 0 && rows.every((r) => selected[r.student_id]);
@@ -207,7 +211,7 @@ export default function HodMentorAllocation() {
       flash(
         decision === "approve"
           ? `Approved ${data.count} proposal(s)`
-          : `Rejected ${data.count} proposal(s) — the advisor will be asked to propose again`
+          : `Returned ${data.count} proposal(s) — the tutor will be asked to propose again`
       );
       await refresh();
     } catch (err) {
@@ -283,8 +287,7 @@ export default function HodMentorAllocation() {
   };
 
   // ================= RENDER HELPERS =================
-  const setFilter = (key, value) =>
-    setFilters((prev) => ({ ...prev, [key]: value }));
+  const setFilter = (key, value) => setFilters((prev) => ({ ...prev, [key]: value }));
 
   const mentorLabel = (m) =>
     `${m.name} · ${m.assigned}/${m.capacity} · A ${m.band_a} B ${m.band_b} C ${m.band_c}` +
@@ -292,6 +295,8 @@ export default function HodMentorAllocation() {
 
   const balancePill = (state) =>
     state === "ok" ? "ma-green" : state === "warn" ? "ma-amber" : "ma-red";
+
+  const needAttention = mentors.filter((m) => m.balance_state !== "ok").length;
 
   return (
     <div className="app">
@@ -303,13 +308,30 @@ export default function HodMentorAllocation() {
         <div className="main">
           <div className="content">
 
-            {/* ================= HEADER ================= */}
+            {/* ================= HEADER =================
+                Department, year and title in one row. The counts that used to
+                sit here are now in one place only, the summary strip below. */}
             <div className="header-box">
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                 <h2 style={{ margin: 0 }}>Mentor Allocation</h2>
                 {department && <span className="ma-pill ma-blue">{department}</span>}
+                <div style={{ flex: 1 }} />
+                <select
+                  value={academicYear}
+                  onChange={(e) => setAcademicYear(e.target.value)}
+                  style={{ minWidth: 150 }}
+                >
+                  {(options?.academic_years || []).map((ay) => (
+                    <option key={ay} value={ay}>
+                      {prettyYear(ay)}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <p>Approve class advisor proposals, assign and reassign student mentors</p>
+              <p>
+                Every student gets a faculty mentor. Tutors propose groups, you
+                approve them, and anyone left over you assign yourself.
+              </p>
             </div>
 
             <MentoringTabs />
@@ -321,82 +343,102 @@ export default function HodMentorAllocation() {
               </div>
             )}
 
-            {/* ================= CONTEXT BAR ================= */}
-            <div className="ma-context">
-              <div>
-                <span className="ma-label">Department</span>
-                <div className="ma-static">{department || "—"}</div>
-              </div>
-              <div>
-                <span className="ma-label">Academic Year</span>
-                <select
-                  value={academicYear}
-                  onChange={(e) => setAcademicYear(e.target.value)}
-                >
-                  {(options?.academic_years || []).map((ay) => (
-                    <option key={ay} value={ay}>
-                      {prettyYear(ay)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="ma-spacer" />
-              <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
-                <span className="ma-pill ma-green">{counts.active} active</span>
-                {counts.pending > 0 && (
-                  <span className="ma-pill ma-amber">
-                    {counts.pending} awaiting approval
-                  </span>
+            {/* ================= WHAT NEEDS DOING =================
+                One banner, one primary action. Previously the same job was
+                offered by two differently-named buttons in two places, both
+                calling the same function. */}
+            {!loading && !preview && (
+              <>
+                {proposalStudents > 0 && (
+                  <div className="ma-note amber" style={{ marginBottom: 14 }}>
+                    <b>
+                      {batches.length} tutor proposal
+                      {batches.length === 1 ? "" : "s"} waiting on you
+                      {" · "}
+                      {proposalStudents} student{proposalStudents === 1 ? "" : "s"}
+                    </b>
+                    Open a proposal below to see the students and the mentor the
+                    tutor picked, then approve or send it back.
+                  </div>
                 )}
-                {counts.none > 0 && (
-                  <span className="ma-pill ma-red">{counts.none} with no mentor</span>
-                )}
-              </div>
-            </div>
 
-            {/* ================= CARDS ================= */}
+                {counts.none > 0 && (
+                  <div className="ma-note blue" style={{ marginBottom: 14 }}>
+                    <b>
+                      {counts.none} student{counts.none === 1 ? "" : "s"} have no
+                      mentor
+                    </b>
+                    <div style={{ marginTop: 8, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                      <button className="ma-btn primary" onClick={showPreview} disabled={busy}>
+                        Suggest a balanced split
+                      </button>
+                      <span style={{ fontSize: 13, color: "#6b7280" }}>
+                        Shows you the plan first. Nothing is saved until you confirm.
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {proposalStudents === 0 && counts.none === 0 && counts.total > 0 && (
+                  <div className="ma-note" style={{ marginBottom: 14 }}>
+                    <b>Nothing waiting on you</b>
+                    Every student in {department} has a mentor and no proposal is
+                    pending. Use <b>All students</b> to look someone up or make a
+                    change.
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* ================= SUMMARY =================
+                Four figures, each named for what it actually counts. The old
+                red card was labelled "Pending Allocations" but rendered the
+                no-mentor count, so two different things shared one name. */}
             <div className="ma-cards">
               <div className="ma-card">
-                <div className="l">Total Mentors</div>
-                <div className="n">{mentors.length}</div>
-                <div className="d">{department}</div>
-              </div>
-              <div className="ma-card">
-                <div className="l">Total Students</div>
+                <div className="l">Students</div>
                 <div className="n">{counts.total}</div>
                 <div className="d">
-                  A {rows.filter((r) => r.grade_band === "A").length} · B{" "}
+                  Grade A {rows.filter((r) => r.grade_band === "A").length} · B{" "}
                   {rows.filter((r) => r.grade_band === "B").length} · C{" "}
                   {rows.filter((r) => r.grade_band === "C").length}
                 </div>
               </div>
               <div className="ma-card">
-                <div className="l">Active Allocations</div>
+                <div className="l">Have a mentor</div>
                 <div className="n green">{counts.active}</div>
                 <div className="d">
-                  {counts.total
-                    ? Math.round((counts.active / counts.total) * 100)
-                    : 0}
-                  % of students
+                  {counts.total ? Math.round((counts.active / counts.total) * 100) : 0}% of
+                  students
                 </div>
               </div>
               <div className="ma-card">
-                <div className="l">Pending Allocations</div>
-                <div className="n red">{counts.none}</div>
+                <div className="l">Awaiting your approval</div>
+                <div className="n">{counts.pending}</div>
                 <div className="d">
-                  {counts.none ? "Need a mentor" : "Everyone has a mentor"}
+                  {counts.pending ? "Proposed by a tutor" : "No proposal pending"}
+                </div>
+              </div>
+              <div className="ma-card">
+                <div className="l">No mentor yet</div>
+                <div className={counts.none ? "n red" : "n"}>{counts.none}</div>
+                <div className="d">
+                  {counts.none ? "Nobody has proposed these" : "Everyone is allocated"}
                 </div>
               </div>
             </div>
 
-            {/* ================= TOOLBAR ================= */}
+            {/* ================= VIEW SWITCH ================= */}
             <div className="ma-toolbar">
               <div className="ma-toggle">
                 <button
                   className={view === "proposals" ? "on" : ""}
                   onClick={() => setView("proposals")}
                 >
-                  Review proposals
+                  Needs a decision
+                  {proposalStudents + (pool?.count || 0) > 0
+                    ? ` (${batches.length + (pool?.count ? 1 : 0)})`
+                    : ""}
                 </button>
                 <button
                   className={view === "students" ? "on" : ""}
@@ -406,9 +448,6 @@ export default function HodMentorAllocation() {
                 </button>
               </div>
               <div className="ma-spacer" style={{ flex: 1 }} />
-              <button className="ma-btn" onClick={showPreview} disabled={busy}>
-                Auto-distribute unassigned
-              </button>
             </div>
 
             {loading && (
@@ -422,17 +461,18 @@ export default function HodMentorAllocation() {
               <div className="ma-panel" style={{ border: "2px solid #2563eb" }}>
                 <div className="ma-panel-head">
                   <div>
-                    <h3>Preview — nothing is saved yet</h3>
+                    <h3>Suggested split — nothing is saved yet</h3>
                     <p>
-                      {preview.total_students} students would go to{" "}
-                      {preview.preview.length} mentor(s)
+                      {preview.total_students} student
+                      {preview.total_students === 1 ? "" : "s"} would go to{" "}
+                      {preview.preview.length} mentor
+                      {preview.preview.length === 1 ? "" : "s"}, balanced so each
+                      mentor gets a mix of grade bands
                     </p>
                   </div>
                   <div style={{ flex: 1 }} />
                   <span
-                    className={`ma-pill ${
-                      preview.any_over_capacity ? "ma-amber" : "ma-green"
-                    }`}
+                    className={`ma-pill ${preview.any_over_capacity ? "ma-amber" : "ma-green"}`}
                   >
                     {preview.any_over_capacity
                       ? "Some go over capacity"
@@ -444,17 +484,19 @@ export default function HodMentorAllocation() {
                     <thead>
                       <tr>
                         <th>Mentor</th>
-                        <th>Before</th>
+                        <th>Has now</th>
                         <th></th>
-                        <th>After</th>
+                        <th>Would have</th>
                         <th>Adding</th>
-                        <th>Capacity</th>
+                        <th>Against capacity</th>
                       </tr>
                     </thead>
                     <tbody>
                       {preview.preview.map((p) => (
                         <tr key={p.mentor_id}>
-                          <td><b>{p.mentor_name}</b></td>
+                          <td>
+                            <b>{p.mentor_name}</b>
+                          </td>
                           <td className="num">{p.before}</td>
                           <td style={{ color: "#9ca3af" }}>→</td>
                           <td className="num">
@@ -465,9 +507,7 @@ export default function HodMentorAllocation() {
                           <td className="num">+{p.adding}</td>
                           <td>
                             <span
-                              className={`ma-pill ${
-                                p.over_capacity ? "ma-red" : "ma-green"
-                              }`}
+                              className={`ma-pill ${p.over_capacity ? "ma-red" : "ma-green"}`}
                             >
                               {p.after} / {p.capacity}
                             </span>
@@ -479,7 +519,7 @@ export default function HodMentorAllocation() {
                 </div>
                 <div className="ma-panel-foot">
                   <button className="ma-btn primary" onClick={confirmSplit} disabled={busy}>
-                    Confirm split
+                    Confirm and assign
                   </button>
                   <button className="ma-btn" onClick={() => setPreview(null)}>
                     Cancel
@@ -499,7 +539,7 @@ export default function HodMentorAllocation() {
                       <b style={{ display: "block", marginBottom: 6 }}>
                         Nothing waiting on you
                       </b>
-                      Every advisor proposal has been decided and every student has a
+                      Every tutor proposal has been decided and every student has a
                       mentor. Use <b>All students</b> to look someone up.
                     </div>
                   </div>
@@ -512,16 +552,18 @@ export default function HodMentorAllocation() {
                   >
                     <div
                       className="ma-batch-head"
-                      onClick={() =>
-                        setOpenBatch((p) => ({ ...p, [b.key]: !p[b.key] }))
-                      }
+                      onClick={() => setOpenBatch((p) => ({ ...p, [b.key]: !p[b.key] }))}
                     >
                       <div className="ma-avatar">
                         {(b.advisor_name || "?").slice(0, 2).toUpperCase()}
                       </div>
                       <div className="ma-batch-title">
                         <b>{b.advisor_name}</b>
-                        <span>Proposed group list awaiting your approval</span>
+                        <span>
+                          {openBatch[b.key]
+                            ? "Click to collapse"
+                            : "Click to see the students and their proposed mentors"}
+                        </span>
                       </div>
                       <div className="ma-batch-count">
                         <b>{b.count}</b>
@@ -535,8 +577,16 @@ export default function HodMentorAllocation() {
                         ))}
                       </div>
                       <div className="ma-chips">
-                        <span className={`ma-chip ${b.balanced ? "good" : "bad"}`}>
-                          {b.balanced ? "✓" : "⚠"} A {b.band_a} B {b.band_b} C {b.band_c}
+                        <span
+                          className={`ma-chip ${b.balanced ? "good" : "bad"}`}
+                          title={
+                            b.balanced
+                              ? "This group mixes grade bands as the rule requires"
+                              : "This group is missing a grade band"
+                          }
+                        >
+                          {b.balanced ? "✓ Mixed grades" : "⚠ Grade gap"} · A {b.band_a} B{" "}
+                          {b.band_b} C {b.band_c}
                         </span>
                       </div>
                       <div className="ma-batch-actions">
@@ -545,10 +595,7 @@ export default function HodMentorAllocation() {
                           disabled={busy}
                           onClick={(e) => {
                             e.stopPropagation();
-                            doDecide(
-                              b.students.map((s) => s.allocation_id),
-                              "approve"
-                            );
+                            doDecide(b.students.map((s) => s.allocation_id), "approve");
                           }}
                         >
                           Approve all
@@ -558,13 +605,10 @@ export default function HodMentorAllocation() {
                           disabled={busy}
                           onClick={(e) => {
                             e.stopPropagation();
-                            doDecide(
-                              b.students.map((s) => s.allocation_id),
-                              "reject"
-                            );
+                            doDecide(b.students.map((s) => s.allocation_id), "reject");
                           }}
                         >
-                          Reject all
+                          Send back
                         </button>
                       </div>
                     </div>
@@ -576,7 +620,7 @@ export default function HodMentorAllocation() {
                             <div className="ma-note amber">
                               <b>⚠ This proposal misses the composition rule</b>
                               A group should contain band A, B and C students. Approve
-                              anyway if you know why, or reject and ask{" "}
+                              anyway if you know why, or send it back and ask{" "}
                               {b.advisor_name} to redo it.
                             </div>
                           </div>
@@ -596,7 +640,9 @@ export default function HodMentorAllocation() {
                             <tbody>
                               {b.students.map((s) => (
                                 <tr key={s.allocation_id}>
-                                  <td><b>{s.student_name}</b></td>
+                                  <td>
+                                    <b>{s.student_name}</b>
+                                  </td>
                                   <td className="num">{s.roll_number}</td>
                                   <td>
                                     <span className={`ma-pill ${bandClass(s.grade_band)}`}>
@@ -610,20 +656,16 @@ export default function HodMentorAllocation() {
                                       <button
                                         className="ma-btn small green"
                                         disabled={busy}
-                                        onClick={() =>
-                                          doDecide([s.allocation_id], "approve")
-                                        }
+                                        onClick={() => doDecide([s.allocation_id], "approve")}
                                       >
                                         Approve
                                       </button>
                                       <button
                                         className="ma-btn small danger"
                                         disabled={busy}
-                                        onClick={() =>
-                                          doDecide([s.allocation_id], "reject")
-                                        }
+                                        onClick={() => doDecide([s.allocation_id], "reject")}
                                       >
-                                        Reject
+                                        Send back
                                       </button>
                                     </div>
                                   </td>
@@ -647,8 +689,8 @@ export default function HodMentorAllocation() {
                       <div className="ma-batch-title">
                         <b>Students with no mentor</b>
                         <span>
-                          Nobody has proposed anything for these — assign them or
-                          auto-distribute
+                          No tutor has proposed anything for these. Use the suggested
+                          split above, or assign them one at a time under All students.
                         </span>
                       </div>
                       <div className="ma-batch-count">
@@ -656,21 +698,9 @@ export default function HodMentorAllocation() {
                         <span>students</span>
                       </div>
                       <div className="ma-chips">
-                        <span className="ma-chip">A {pool.band_a}</span>
+                        <span className="ma-chip">Grade A {pool.band_a}</span>
                         <span className="ma-chip">B {pool.band_b}</span>
                         <span className="ma-chip">C {pool.band_c}</span>
-                      </div>
-                      <div className="ma-batch-actions">
-                        <button
-                          className="ma-btn primary"
-                          disabled={busy}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            showPreview();
-                          }}
-                        >
-                          Apply suggested split
-                        </button>
                       </div>
                     </div>
 
@@ -690,7 +720,9 @@ export default function HodMentorAllocation() {
                           <tbody>
                             {pool.students.map((s) => (
                               <tr key={s.id}>
-                                <td><b>{s.student_name}</b></td>
+                                <td>
+                                  <b>{s.student_name}</b>
+                                </td>
                                 <td className="num">{s.roll_number}</td>
                                 <td>
                                   <span className={`ma-pill ${bandClass(s.band)}`}>
@@ -706,7 +738,7 @@ export default function HodMentorAllocation() {
                                     className="ma-btn small link"
                                     onClick={() => showWhy(s.id)}
                                   >
-                                    Best fit?
+                                    Who fits best?
                                   </button>
                                 </td>
                               </tr>
@@ -719,7 +751,9 @@ export default function HodMentorAllocation() {
                             <div className="ma-why">
                               <b>
                                 Why {why.suggested?.name || "no one"}
-                                {why.grade_band ? ` for a band ${why.grade_band} student?` : "?"}
+                                {why.grade_band
+                                  ? ` for a grade ${why.grade_band} student?`
+                                  : "?"}
                               </b>
                               <ul>
                                 {(why.reasons || []).map((r, i) => (
@@ -741,11 +775,12 @@ export default function HodMentorAllocation() {
               <>
                 <div className="ma-panel">
                   <div className="ma-panel-head">
-                    <div><h3>Filter students</h3><p>All filters in one place</p></div>
+                    <div>
+                      <h3>Find a student</h3>
+                      <p>Narrow the list, then assign or reassign below</p>
+                    </div>
                     <div style={{ flex: 1 }} />
-                    <span className="ma-pill ma-blue">
-                      Showing {rows.length}
-                    </span>
+                    <span className="ma-pill ma-blue">Showing {rows.length}</span>
                   </div>
                   <div className="ma-panel-body">
                     <div className="ma-filters">
@@ -757,7 +792,9 @@ export default function HodMentorAllocation() {
                         >
                           <option value="all">All years</option>
                           {(options?.years || []).map((y) => (
-                            <option key={y} value={y}>{yearLabel(y)} Year</option>
+                            <option key={y} value={y}>
+                              {yearLabel(y)} Year
+                            </option>
                           ))}
                         </select>
                       </div>
@@ -769,7 +806,9 @@ export default function HodMentorAllocation() {
                         >
                           <option value="all">All courses</option>
                           {(options?.courses || []).map((c) => (
-                            <option key={c.id} value={c.id}>{c.name}</option>
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
                           ))}
                         </select>
                       </div>
@@ -781,7 +820,9 @@ export default function HodMentorAllocation() {
                         >
                           <option value="all">All grades</option>
                           {(options?.bands || []).map((b) => (
-                            <option key={b.value} value={b.value}>{b.label}</option>
+                            <option key={b.value} value={b.value}>
+                              {b.label}
+                            </option>
                           ))}
                         </select>
                       </div>
@@ -794,7 +835,9 @@ export default function HodMentorAllocation() {
                           <option value="all">All mentors</option>
                           <option value="none">Not assigned</option>
                           {mentors.map((m) => (
-                            <option key={m.id} value={m.id}>{m.name}</option>
+                            <option key={m.id} value={m.id}>
+                              {m.name}
+                            </option>
                           ))}
                         </select>
                       </div>
@@ -806,7 +849,9 @@ export default function HodMentorAllocation() {
                         >
                           <option value="all">All</option>
                           {(options?.statuses || []).map((s) => (
-                            <option key={s.value} value={s.value}>{s.label}</option>
+                            <option key={s.value} value={s.value}>
+                              {s.label}
+                            </option>
                           ))}
                         </select>
                       </div>
@@ -834,9 +879,14 @@ export default function HodMentorAllocation() {
 
                 <div className="ma-panel">
                   <div className="ma-panel-head">
-                    <div><h3>All students</h3><p>{prettyYear(academicYear)}</p></div>
+                    <div>
+                      <h3>All students</h3>
+                      <p>{prettyYear(academicYear)}</p>
+                    </div>
                   </div>
 
+                  {/* assign bar — only useful once something is ticked, so it
+                      says so rather than sitting there looking broken */}
                   <div
                     className="ma-panel-body"
                     style={{ background: "#fbfcfd", borderBottom: "1px solid #f0f2f6" }}
@@ -846,9 +896,7 @@ export default function HodMentorAllocation() {
                         Select all in view
                       </button>
                       <span
-                        className={`ma-pill ${
-                          selectedIds.length ? "ma-blue" : "ma-grey"
-                        }`}
+                        className={`ma-pill ${selectedIds.length ? "ma-blue" : "ma-grey"}`}
                       >
                         {selectedIds.length
                           ? `${selectedIds.length} selected · A ${
@@ -858,7 +906,7 @@ export default function HodMentorAllocation() {
                             } · C ${
                               selectedRows.filter((r) => r.grade_band === "C").length
                             }`
-                          : "Nothing selected"}
+                          : "Tick students to assign them"}
                       </span>
                       <div style={{ flex: 1 }} />
                       <select
@@ -866,14 +914,16 @@ export default function HodMentorAllocation() {
                         onChange={(e) => setBulkMentor(e.target.value)}
                         style={{ minWidth: 280 }}
                       >
-                        <option value="">Assign to…</option>
+                        <option value="">Choose a mentor…</option>
                         {mentors.map((m) => (
-                          <option key={m.id} value={m.id}>{mentorLabel(m)}</option>
+                          <option key={m.id} value={m.id}>
+                            {mentorLabel(m)}
+                          </option>
                         ))}
                       </select>
                       <button
                         className="ma-btn primary"
-                        disabled={busy}
+                        disabled={busy || !selectedIds.length || !bulkMentor}
                         onClick={() => doAssign(selectedIds, bulkMentor)}
                       >
                         Assign
@@ -895,9 +945,8 @@ export default function HodMentorAllocation() {
                           <th>CGPA</th>
                           <th>Year</th>
                           <th>Course</th>
-                          <th>Academic Year</th>
                           <th>Mentor</th>
-                          <th>Recommended By</th>
+                          <th>Proposed by</th>
                           <th>Status</th>
                           <th>Actions</th>
                         </tr>
@@ -905,7 +954,7 @@ export default function HodMentorAllocation() {
                       <tbody>
                         {rows.length === 0 && (
                           <tr>
-                            <td colSpan={12} className="ma-empty">
+                            <td colSpan={11} className="ma-empty">
                               No student matches these filters.{" "}
                               <button
                                 className="ma-btn link"
@@ -926,15 +975,15 @@ export default function HodMentorAllocation() {
                             <tr key={r.student_id}>
                               <td>
                                 <span
-                                  className={`ma-check${
-                                    selected[r.student_id] ? " on" : ""
-                                  }`}
+                                  className={`ma-check${selected[r.student_id] ? " on" : ""}`}
                                   onClick={() => toggleOne(r.student_id)}
                                 >
                                   ✓
                                 </span>
                               </td>
-                              <td><b>{r.student_name}</b></td>
+                              <td>
+                                <b>{r.student_name}</b>
+                              </td>
                               <td className="num">{r.roll_number}</td>
                               <td>
                                 <span className={`ma-pill ${bandClass(r.grade_band)}`}>
@@ -946,7 +995,6 @@ export default function HodMentorAllocation() {
                               </td>
                               <td>{yearLabel(r.year)}</td>
                               <td>{r.course_name || "—"}</td>
-                              <td className="num">{prettyYear(r.academic_year)}</td>
                               <td>
                                 {r.mentor_name || (
                                   <span className="ma-pill ma-red">Not assigned</span>
@@ -965,20 +1013,16 @@ export default function HodMentorAllocation() {
                                       <button
                                         className="ma-btn small green"
                                         disabled={busy}
-                                        onClick={() =>
-                                          doDecide([r.allocation_id], "approve")
-                                        }
+                                        onClick={() => doDecide([r.allocation_id], "approve")}
                                       >
                                         Approve
                                       </button>
                                       <button
                                         className="ma-btn small danger"
                                         disabled={busy}
-                                        onClick={() =>
-                                          doDecide([r.allocation_id], "reject")
-                                        }
+                                        onClick={() => doDecide([r.allocation_id], "reject")}
                                       >
-                                        Reject
+                                        Send back
                                       </button>
                                     </>
                                   )}
@@ -988,10 +1032,10 @@ export default function HodMentorAllocation() {
                                         className="ma-btn small violet"
                                         onClick={() => {
                                           setSelected({ [r.student_id]: true });
-                                          flash("Selected — pick a mentor in the bar above");
+                                          flash("Selected — now pick a mentor in the bar above");
                                         }}
                                       >
-                                        Reassign
+                                        Change mentor
                                       </button>
                                       <button
                                         className="ma-btn small danger"
@@ -1025,7 +1069,7 @@ export default function HodMentorAllocation() {
                   {why && view === "students" && (
                     <div className="ma-panel-body">
                       <div className="ma-why">
-                        <b>Suggested: {why.suggested?.name || "no one available"}</b>
+                        <b>Best fit: {why.suggested?.name || "no one available"}</b>
                         <ul>
                           {(why.reasons || []).map((r, i) => (
                             <li key={i}>{r}</li>
@@ -1035,9 +1079,7 @@ export default function HodMentorAllocation() {
                           <button
                             className="ma-btn small primary"
                             style={{ marginTop: 10 }}
-                            onClick={() =>
-                              doAssign([why.student_id], why.suggested.id)
-                            }
+                            onClick={() => doAssign([why.student_id], why.suggested.id)}
                           >
                             Assign to {why.suggested.name}
                           </button>
@@ -1047,90 +1089,105 @@ export default function HodMentorAllocation() {
                   )}
 
                   <div className="ma-panel-foot">
-                    Remove closes an allocation and keeps the record. Reassign opens a
-                    new one. Neither deletes history.
+                    Remove closes an allocation and keeps the record. Change mentor opens
+                    a new one. Neither deletes history.
                   </div>
                 </div>
               </>
             )}
 
-            {/* ================= MENTOR CAPACITY ================= */}
+            {/* ================= MENTOR CAPACITY =================
+                Reference, not a task. Collapsed by default so it stops taking
+                half the screen while empty. */}
             {!loading && mentors.length > 0 && (
               <div className="ma-panel">
-                <div className="ma-panel-head">
+                <div
+                  className="ma-panel-head"
+                  style={{ cursor: "pointer" }}
+                  onClick={() => setShowCapacity((v) => !v)}
+                >
                   <div>
-                    <h3>Mentor capacity</h3>
-                    <p>Assigned, capacity and how many places are left</p>
+                    <h3>How loaded is each mentor?</h3>
+                    <p>
+                      {mentors.length} mentor{mentors.length === 1 ? "" : "s"} in{" "}
+                      {department}
+                      {needAttention
+                        ? ` · ${needAttention} could do with a better grade mix`
+                        : " · all have a balanced grade mix"}
+                    </p>
                   </div>
                   <div style={{ flex: 1 }} />
-                  <span
-                    className={`ma-pill ${
-                      mentors.some((m) => m.balance_state !== "ok")
-                        ? "ma-amber"
-                        : "ma-green"
-                    }`}
-                  >
-                    {mentors.filter((m) => m.balance_state !== "ok").length
-                      ? `${
-                          mentors.filter((m) => m.balance_state !== "ok").length
-                        } need attention`
-                      : "All balanced"}
-                  </span>
+                  <button className="ma-btn small">
+                    {showCapacity ? "Hide" : "Show"}
+                  </button>
                 </div>
-                <div className="ma-panel-body">
-                  <div className="ma-capacity">
-                    {mentors.map((m) => {
-                      const pct = Math.min(100, (m.assigned / m.capacity) * 100);
-                      const barClass = m.is_full
-                        ? "red"
-                        : m.available <= 3
-                        ? "amber"
-                        : "green";
-                      return (
-                        <div
-                          className="ma-cap"
-                          key={m.id}
-                          onClick={() => setBulkMentor(String(m.id))}
-                          title="Click to pick this mentor in the assign bar"
-                        >
-                          <div className="name">{m.name}</div>
-                          <div className="big">
-                            <b>{m.assigned}</b>
-                            <span>of {m.capacity}</span>
-                            <div style={{ flex: 1 }} />
-                            <span
-                              className={`ma-pill ${
-                                m.is_full
-                                  ? "ma-red"
-                                  : m.available <= 3
-                                  ? "ma-amber"
-                                  : "ma-green"
-                              }`}
-                            >
-                              {m.is_full ? "Full" : `${m.available} free`}
-                            </span>
+
+                {showCapacity && (
+                  <div className="ma-panel-body">
+                    <div className="ma-capacity">
+                      {mentors.map((m) => {
+                        const pct = Math.min(100, (m.assigned / m.capacity) * 100);
+                        const barClass = m.is_full
+                          ? "red"
+                          : m.available <= 3
+                          ? "amber"
+                          : "green";
+                        return (
+                          <div
+                            className="ma-cap"
+                            key={m.id}
+                            onClick={() => {
+                              setBulkMentor(String(m.id));
+                              setView("students");
+                              flash(`${m.name} selected in the assign bar`);
+                            }}
+                            title="Click to pick this mentor in the assign bar"
+                          >
+                            <div className="name">{m.name}</div>
+                            <div className="big">
+                              <b>{m.assigned}</b>
+                              <span>of {m.capacity}</span>
+                              <div style={{ flex: 1 }} />
+                              <span
+                                className={`ma-pill ${
+                                  m.is_full
+                                    ? "ma-red"
+                                    : m.available <= 3
+                                    ? "ma-amber"
+                                    : "ma-green"
+                                }`}
+                              >
+                                {m.is_full ? "Full" : `${m.available} free`}
+                              </span>
+                            </div>
+
+                            <div className="ma-small" style={{ marginBottom: 3 }}>
+                              How full
+                            </div>
+                            <div className="ma-bar">
+                              <i className={barClass} style={{ width: `${pct}%` }} />
+                            </div>
+
+                            <div className="ma-small" style={{ marginTop: 7, marginBottom: 3 }}>
+                              Grade mix · A {m.band_a} · B {m.band_b} · C {m.band_c}
+                            </div>
+                            <div className="ma-mix">
+                              <i style={{ background: "#10b981", flex: m.band_a || 0.02 }} />
+                              <i style={{ background: "#2563eb", flex: m.band_b || 0.02 }} />
+                              <i style={{ background: "#f59e0b", flex: m.band_c || 0.02 }} />
+                            </div>
+
+                            <div style={{ marginTop: 7 }}>
+                              <span className={`ma-pill ${balancePill(m.balance_state)}`}>
+                                {m.balance_message}
+                              </span>
+                            </div>
                           </div>
-                          <div className="ma-bar">
-                            <i className={barClass} style={{ width: `${pct}%` }} />
-                          </div>
-                          <div className="ma-mix">
-                            <i style={{ background: "#10b981", flex: m.band_a || 0.02 }} />
-                            <i style={{ background: "#2563eb", flex: m.band_b || 0.02 }} />
-                            <i style={{ background: "#f59e0b", flex: m.band_c || 0.02 }} />
-                          </div>
-                          <div className="ma-small">
-                            A {m.band_a} · B {m.band_b} · C {m.band_c}
-                          </div>
-                          <div style={{ marginTop: 7 }}>
-                            <span className={`ma-pill ${balancePill(m.balance_state)}`}>
-                              {m.balance_message}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
 

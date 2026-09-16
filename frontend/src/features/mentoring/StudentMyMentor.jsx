@@ -194,7 +194,7 @@ export default function StudentMyMentor() {
                       </tbody></table>
                     </div>
                     <div className="ma-panel-foot">
-                      Assigned by the HOD. If any of this is wrong, tell your class advisor.
+                      Assigned by the HOD. If any of this is wrong, tell your class tutor.
                     </div>
                   </div>
 
@@ -250,7 +250,7 @@ export default function StudentMyMentor() {
                         </div>
                         <div className="ma-note" style={{ marginTop: 10 }}>
                           <b>For attendance or leave</b>
-                          Go to your class advisor
+                          Go to your class tutor
                           {advisor?.name ? `, ${advisor.name}` : ""} — not your mentor.
                           On-duty and leave letters are handled there.
                         </div>
@@ -330,7 +330,7 @@ export default function StudentMyMentor() {
                         <button className="ma-btn primary" onClick={doSend} disabled={busy}>Send</button>
                       </div>
                       <div className="ma-panel-foot">
-                        For anything urgent, speak to your class advisor.
+                        For anything urgent, speak to your class tutor.
                       </div>
                     </>
                   )}
@@ -445,17 +445,17 @@ export default function StudentMyMentor() {
                     </div>
                     <div className="ma-note" style={{ marginTop: 10 }}>
                       <b>Who handles attendance and leave?</b>
-                      Your class advisor{advisor?.name ? `, ${advisor.name}` : ""} — not
+                      Your class tutor{advisor?.name ? `, ${advisor.name}` : ""} — not
                       your mentor. On-duty and leave letters go there.
                     </div>
                     <div className="ma-note" style={{ marginTop: 10 }}>
                       <b>My mentor is not replying. What do I do?</b>
-                      Wait two working days, then speak to your class advisor.
+                      Wait two working days, then speak to your class tutor.
                     </div>
                     <div className="ma-note amber" style={{ marginTop: 10 }}>
                       <b>⚠ If something is urgent or serious</b>
                       For anything to do with your safety or wellbeing, contact your class
-                      advisor or the HOD directly. Do not wait for a message reply.
+                      tutor or the HOD directly. Do not wait for a message reply.
                     </div>
                   </div>
                 </div>
@@ -499,3 +499,4 @@ function ProgressGrid({ p }) {
     </div>
   );
 }
+

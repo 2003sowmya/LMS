@@ -44,6 +44,7 @@ from .utils import (
     mentor_loads,
     suggest_split,
     why_best_fit,
+    resolve_advisor_class,
 )
 
 
@@ -142,9 +143,11 @@ def hod_dashboard(request):
         allocs.filter(Q(is_active=True) | Q(status="pending"))
         .values_list("student_id", flat=True)
     )
-    unassigned = total_students - len(allocated_ids)
 
-    # proposals grouped by the class advisor who sent them
+    eligible_ids = set(students.values_list("id", flat=True))
+    unassigned = len(eligible_ids - allocated_ids)
+
+    # proposals grouped by the tutor who sent them
     by_advisor = {}
     for a in allocs.filter(source="advisor").select_related("proposed_by"):
         if not a.proposed_by_id:
@@ -305,7 +308,7 @@ def hod_proposals(request):
         b = batches.setdefault(key, {
             "key": f"advisor-{key}",
             "advisor_id": a.proposed_by_id,
-            "advisor_name": person_name(a.proposed_by) or "Unknown advisor",
+            "advisor_name": person_name(a.proposed_by) or "Unknown tutor",
             "students": [], "mentor_spread": {},
             "band_a": 0, "band_b": 0, "band_c": 0,
         })
@@ -581,7 +584,7 @@ def hod_auto_distribute(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def hod_decide_proposals(request):
-    """Approve or reject advisor proposals. Send one id or a whole batch."""
+    """Approve or reject tutor proposals. Send one id or a whole batch."""
     dept, _setting, err = _dept_for(request)
     if err:
         return err
@@ -589,6 +592,21 @@ def hod_decide_proposals(request):
     ser = DecideProposalSerializer(data=request.data)
     ser.is_valid(raise_exception=True)
     data = ser.validated_data
+
+    # Resolve the swap mentor ONCE, before the transaction opens. This used to
+    # happen inside the loop, and a bad id returned a 400 from inside an open
+    # atomic block — which commits, not rolls back. Half the batch was approved
+    # while the caller was told nothing had happened.
+    swapped = None
+    if data.get("mentor_id"):
+        swapped = User.objects.filter(
+            id=data["mentor_id"], role="teacher", department=dept
+        ).first()
+        if not swapped:
+            return Response(
+                {"detail": "Mentor not found in your department."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
     qs = MentorAllocation.objects.filter(
         id__in=data["allocation_ids"], department=dept, status="pending"
@@ -598,17 +616,54 @@ def hod_decide_proposals(request):
                         status=status.HTTP_404_NOT_FOUND)
 
     n = 0
+    # who proposed what, so the tutor can be told if the HOD changes it
+    swapped_for = {}        # tutor_id -> [(student, from_mentor, to_mentor)]
+    touched = {}            # tutor_id -> how many rows were decided
+    rejected = []           # (student_id, academic_year) for the batch reset
+
     with transaction.atomic():
         for a in qs.select_for_update():
             if data["decision"] == "approve":
+                # HOD may swap the mentor while approving ("rearrange").
+                if swapped and swapped.id != a.mentor_id:
+                    a.reason = (
+                        f"Tutor proposed {person_name(a.mentor)}, "
+                        f"HOD assigned {person_name(swapped)} instead"
+                    )
+                    if a.proposed_by_id:
+                        swapped_for.setdefault(a.proposed_by_id, []).append(
+                            (a.student, a.mentor, swapped)
+                        )
+                    a.previous_mentor = a.mentor
+                    a.mentor = swapped
+                else:
+                    a.reason = "Tutor proposal approved by the HOD"
+                # a student may still hold last term's mentor: close it, or
+                # the one-active-mentor constraint rejects this row
+                prior = (
+                    MentorAllocation.objects
+                    .select_for_update()
+                    .filter(student_id=a.student_id,
+                            academic_year=a.academic_year,
+                            is_active=True)
+                    .exclude(id=a.id)
+                    .first()
+                )
+                if prior:
+                    a.previous_mentor = a.previous_mentor or prior.mentor
+                    prior.close(
+                        reason="Replaced by an approved tutor proposal",
+                        by_user=request.user,
+                    )
+
                 a.approved_by = request.user
                 a.status = "active"
                 a.is_active = True
-                a.reason = "Advisor proposal approved by the HOD"
                 if data.get("note"):
                     a.note = data["note"]
                 a.save()
             else:
+                rejected.append((a.student_id, a.academic_year))
                 a.status = "rejected"
                 a.is_active = False
                 a.end_date = timezone.localdate()
@@ -620,9 +675,79 @@ def hod_decide_proposals(request):
                     a.note = data["note"]
                 a.save()
             n += 1
+            if a.proposed_by_id:
+                touched[a.proposed_by_id] = touched.get(a.proposed_by_id, 0) + 1
+
+        # ---------- a returned batch goes back to the tutor ----------
+        # Without this the teams keep submitted_at, the Assign Mentors tab
+        # still reads "already sent", and the tutor cannot act on the feedback.
+        #
+        # Scoped to the SAME academic year as the rejected rows.
+        # MentorTeamMember has no year of its own until you look at its team,
+        # so an unfiltered lookup reopened that student's teams from every year
+        # they had ever been in, including ones already approved and finished.
+        #
+        # INSIDE the transaction: rejecting the rows and reopening the teams
+        # are one decision. Committed separately, a failure between them left
+        # the proposals rejected while the tutor's tab still read "already
+        # sent" - no way forward through the UI, which is the exact state this
+        # block exists to prevent.
+        if rejected:
+            from .models import MentorTeam, MentorTeamMember
+
+            team_ids = set()
+            for student_id, academic_year in rejected:
+                team_ids.update(
+                    MentorTeamMember.objects
+                    .filter(student_id=student_id,
+                            team__academic_year=academic_year)
+                    .values_list("team_id", flat=True)
+                )
+            if team_ids:
+                MentorTeam.objects.filter(id__in=team_ids).update(submitted_at=None)
+
+    # ---------- tell each tutor what happened to their proposal ----------
+    # One message per decision, not one per student: approving a class of 69
+    # should not fill the tutor's bell with 69 identical lines.
+    for advisor_id, count in touched.items():
+        advisor = User.objects.filter(id=advisor_id).first()
+        if not advisor:
+            continue
+
+        changes = swapped_for.get(advisor_id, [])
+
+        if data["decision"] == "reject":
+            title = "Your mentor proposal was returned"
+            body = (
+                f"{person_name(request.user)} returned {count} of your "
+                f"proposed allocation(s). They are back on your Assign "
+                f"Mentors tab - fix them and send again."
+            )
+        elif changes:
+            names = ", ".join(
+                f"{person_name(st)} to {person_name(to)}"
+                for st, _from, to in changes[:3]
+            )
+            more = len(changes) - 3
+            title = "Your mentor proposal was approved with changes"
+            body = (
+                f"{person_name(request.user)} approved {count} allocation(s) "
+                f"but assigned a different mentor for {len(changes)}: {names}"
+                f"{f' and {more} more' if more > 0 else ''}."
+            )
+        else:
+            title = "Your mentor proposal was approved"
+            body = (
+                f"{person_name(request.user)} approved all {count} of your "
+                f"proposed allocation(s)."
+            )
+
+        if data.get("note"):
+            body += f" Note: {data['note']}"
+
+        notify([advisor], title, body)
 
     return Response({"decision": data["decision"], "count": n})
-
 
 # ================= 8. REMOVE AN ALLOCATION =================
 @api_view(["POST"])
@@ -893,7 +1018,9 @@ def staff_my_mentees(request):
     return Response({
         "academic_year": ay,
         "academic_year_choices": academic_year_choices(),
-        "is_mentor": bool(rows) or allocs.exists(),
+        "is_mentor": MentorAllocation.objects.filter(
+            mentor=request.user, academic_year=ay, is_active=True
+        ).exists(),
         "cards": {
             "total_mentees": len(rows),
             "average_attendance": round(sum(at) / len(at)) if at else None,
@@ -1024,7 +1151,7 @@ def student_my_mentor(request):
     )
     backlogs = sum(1 for e in entries if not e.is_pass)
 
-    # the class advisor, from your courses.YearTutor
+    # the tutor, from your courses.YearTutor
     from .utils import advisor_for_student
     advisor = advisor_for_student(me)
 
@@ -1041,7 +1168,7 @@ def student_my_mentor(request):
             "academic_year": ay,
             "message": (
                 "Your department has not allocated a mentor to you for "
-                f"{ay.replace('-', '–')}. Please contact your class advisor "
+                f"{ay.replace('-', '–')}. Please contact your tutor "
                 "or the department office."
             ),
             "class_advisor": (
@@ -1094,6 +1221,42 @@ def _my_mentee_ids(user, ay):
     )
 
 
+# ================= ATTACHMENTS =================
+# The fields already exist on ConversationMessage and are already migrated —
+# the mentor views simply never read or wrote them.
+
+MAX_MSG_UPLOAD = 10 * 1024 * 1024        # 10 MB, same ceiling as class groups
+
+
+def _check_upload(att):
+    """Returns an error Response, or None when the file is fine."""
+    if att and att.size > MAX_MSG_UPLOAD:
+        return Response(
+            {"detail": f"That file is {att.size // (1024 * 1024)} MB. The limit is 10 MB."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    return None
+
+
+def _preview(m):
+    """The one line shown in a conversation list and in the bell."""
+    return f"Shared a file: {m.attachment_name}" if m.attachment_name else "New message"
+
+
+def _msg_json(m, me, request):
+    return {
+        "id": m.id,
+        "text": m.text,
+        "from_me": m.sender_id == me.id,
+        "created_at": m.created_at,
+        "is_read": m.is_read,
+        "attachment_url": (request.build_absolute_uri(m.attachment.url)
+                           if m.attachment else None),
+        "attachment_name": m.attachment_name,
+        "attachment_size": m.attachment_size,
+    }
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def staff_conversations(request):
@@ -1133,7 +1296,7 @@ def staff_conversations(request):
             "roll_number": s.roll_number,
             "year": s.year,
             "course_name": s.course.name if s.course_id else "",
-            "last_message": (m.text[:120] if m else ""),
+            "last_message": (m.text[:120] if m and m.text else (_preview(m) if m else "")),
             "last_from_me": (m.sender_id == request.user.id) if m else False,
             "last_at": m.created_at if m else None,
             "unread": unread.get(sid, 0),
@@ -1166,17 +1329,24 @@ def staff_thread(request, student_id):
 
     if request.method == "POST":
         text = (request.data.get("text") or "").strip()
-        if not text:
-            return Response({"detail": "Message cannot be empty."},
+        att = request.FILES.get("attachment")
+
+        # words, a file, or both — an empty message helps nobody
+        if not text and not att:
+            return Response({"detail": "Write something or attach a file."},
                             status=status.HTTP_400_BAD_REQUEST)
+        err = _check_upload(att)
+        if err:
+            return err
+
         m = ConversationMessage.objects.create(
-            sender=request.user, receiver=student, text=text, context="mentor"
+            sender=request.user, receiver=student, text=text,
+            context="mentor", attachment=att,
         )
-        notify([student], f"Message from {person_name(request.user)}", text)
-        return Response({
-            "id": m.id, "text": m.text, "from_me": True,
-            "created_at": m.created_at, "is_read": m.is_read,
-        }, status=status.HTTP_201_CREATED)
+        notify([student], f"Message from {person_name(request.user)}",
+               text or _preview(m))
+        return Response(_msg_json(m, request.user, request),
+                        status=status.HTTP_201_CREATED)
 
     qs = ConversationMessage.objects.filter(
         Q(sender=request.user, receiver=student) | Q(sender=student, receiver=request.user),
@@ -1195,13 +1365,7 @@ def staff_thread(request, student_id):
             "course_name": student.course.name if student.course_id else "",
             "email": student.email,
         },
-        "messages": [{
-            "id": m.id,
-            "text": m.text,
-            "from_me": m.sender_id == request.user.id,
-            "created_at": m.created_at,
-            "is_read": m.is_read,
-        } for m in qs],
+        "messages": [_msg_json(m, request.user, request) for m in qs],
     })
 
 
@@ -1356,17 +1520,23 @@ def student_thread(request):
 
     if request.method == "POST":
         text = (request.data.get("text") or "").strip()
-        if not text:
-            return Response({"detail": "Message cannot be empty."},
+        att = request.FILES.get("attachment")
+
+        if not text and not att:
+            return Response({"detail": "Write something or attach a file."},
                             status=status.HTTP_400_BAD_REQUEST)
+        err = _check_upload(att)
+        if err:
+            return err
+
         m = ConversationMessage.objects.create(
-            sender=request.user, receiver=mentor, text=text, context="mentor"
+            sender=request.user, receiver=mentor, text=text,
+            context="mentor", attachment=att,
         )
-        notify([mentor], f"Message from {person_name(request.user)}", text)
-        return Response({
-            "id": m.id, "text": m.text, "from_me": True,
-            "created_at": m.created_at,
-        }, status=status.HTTP_201_CREATED)
+        notify([mentor], f"Message from {person_name(request.user)}",
+               text or _preview(m))
+        return Response(_msg_json(m, request.user, request),
+                        status=status.HTTP_201_CREATED)
 
     qs = ConversationMessage.objects.filter(
         Q(sender=request.user, receiver=mentor) | Q(sender=mentor, receiver=request.user),
@@ -1382,12 +1552,7 @@ def student_thread(request):
             "designation": mentor.get_sub_role_display() if mentor.sub_role else "",
             "email": mentor.email,
         },
-        "messages": [{
-            "id": m.id,
-            "text": m.text,
-            "from_me": m.sender_id == request.user.id,
-            "created_at": m.created_at,
-        } for m in qs],
+        "messages": [_msg_json(m, request.user, request) for m in qs],
     })
 
 
@@ -1816,12 +1981,12 @@ def student_withdraw_change_request(request, request_id):
 
 
 # ==================================================================
-# ================= CLASS ADVISOR: CHANGE REQUESTS =================
+# ================= TUTOR: CHANGE REQUESTS =================
 # ==================================================================
 
 def _advisor_qs(user, ay):
     """
-    Requests sitting with this teacher as class advisor.
+    Requests sitting with this teacher as tutor.
 
     Filtered on advisor=user, so a teacher only ever sees requests the
     routing actually assigned to them. is_confidential is excluded as a
@@ -1839,7 +2004,7 @@ def _advisor_qs(user, ay):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def staff_change_requests(request):
-    """?bucket=waiting|forwarded|resolved — the class advisor queue."""
+    """?bucket=waiting|forwarded|resolved — the tutor queue."""
     ay = _year(request)
     qs = _advisor_qs(request.user, ay)
 
@@ -1859,7 +2024,7 @@ def staff_change_requests(request):
 
     return Response({
         "academic_year": ay,
-        "is_advisor": qs.exists() or bool(counts["waiting"]),
+        "is_advisor": resolve_advisor_class(request.user) is not None,
         "counts": counts,
         "bucket": bucket,
         "results": ChangeRequestSerializer(rows, many=True).data,

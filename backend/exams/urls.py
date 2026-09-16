@@ -21,6 +21,7 @@ from .views import (
     results_import,
     ia_template,
     ia_import,
+    generate_exam_fees,
 )
 
 router = DefaultRouter()
@@ -46,4 +47,5 @@ urlpatterns = router.urls + [
     path("results-import/", results_import),
     path("ia-template/", ia_template),
     path("ia-import/", ia_import),
+    path("hall-ticket/generate-exam-fees/", generate_exam_fees),
 ]

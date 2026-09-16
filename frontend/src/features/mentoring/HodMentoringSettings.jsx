@@ -1,5 +1,6 @@
 // frontend/src/features/mentoring/HodMentoringSettings.jsx
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import Navbar from "../../components/Navbar";
 import Sidebar from "../../components/Sidebar";
@@ -12,6 +13,7 @@ import "../../styles/MentorAllocation.css";
 
 export default function HodMentoringSettings() {
   const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
 
   const [form, setForm] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -31,6 +33,7 @@ export default function HodMentoringSettings() {
       setForm(await getSettings());
     } catch (err) {
       setError(errorText(err, "Could not load settings. Are you an HOD?"));
+      setForm(null);
     } finally {
       setLoading(false);
     }
@@ -38,32 +41,75 @@ export default function HodMentoringSettings() {
 
   useEffect(() => { load(); }, [load]);
 
-  const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
-  const save = async () => {
-    // A must sit above B, or every student lands in one grade.
-    if (Number(form.band_a_min) <= Number(form.band_b_min)) {
-      flash("Grade A threshold must be higher than grade B.");
+  const submit = async () => {
+    if (Number(form.band_b_min) >= Number(form.band_a_min)) {
+      flash("Grade B has to start below grade A.");
       return;
     }
     setSaving(true);
     try {
-      const d = await saveSettings({
-        max_students_per_mentor: Number(form.max_students_per_mentor),
-        band_a_min: Number(form.band_a_min),
-        band_b_min: Number(form.band_b_min),
-        require_all_bands: form.require_all_bands,
-        route_via_advisor: form.route_via_advisor,
-        first_year_rule: form.first_year_rule,
+      // require_all_bands is deliberately not sent. It is read-only on the
+      // server now, derived from MentorRule.grade_mix, and DRF drops read-only
+      // fields without complaint — so sending it would look like it worked.
+      const {
+        max_students_per_mentor,
+        allocate_from_year,
+        band_a_min,
+        band_b_min,
+        route_via_advisor,
+        first_year_rule,
+      } = form;
+
+      const saved = await saveSettings({
+        max_students_per_mentor,
+        allocate_from_year,
+        band_a_min,
+        band_b_min,
+        route_via_advisor,
+        first_year_rule,
       });
-      setForm(d);
-      flash("Settings saved");
+      setForm(saved);
+      flash("Saved. New allocations use these settings.");
     } catch (err) {
       flash(errorText(err, "Could not save."));
     } finally {
       setSaving(false);
     }
   };
+
+  if (loading) {
+    return (
+      <div className="app">
+        <Navbar setOpen={setOpen} />
+        <div className="layout">
+          <Sidebar open={open} setOpen={setOpen} />
+          <div className="main">
+            <div className="content">
+              <div className="ma-panel"><div className="ma-empty">Loading…</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !form) {
+    return (
+      <div className="app">
+        <Navbar setOpen={setOpen} />
+        <div className="layout">
+          <Sidebar open={open} setOpen={setOpen} />
+          <div className="main">
+            <div className="content">
+              <div className="ma-note red"><b>Could not load</b>{error}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="app">
@@ -74,200 +120,203 @@ export default function HodMentoringSettings() {
           <div className="content">
 
             <div className="header-box">
-              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                <h2 style={{ margin: 0 }}>Allocation Settings</h2>
-                {form?.department_name && (
-                  <span className="ma-pill ma-blue">{form.department_name}</span>
-                )}
-              </div>
-              <p>Grade thresholds, capacity and the composition rule</p>
+              <h2>Mentoring Settings</h2>
+              <p>
+                {form.department_name} · applies to allocations made from now on,
+                not to ones already approved
+              </p>
             </div>
 
             <MentoringTabs />
 
-            {error && (
-              <div className="ma-note red" style={{ marginBottom: 16 }}>
-                <b>Could not load</b>{error}
+            {/* ms-form scopes this page's form layout.
+                MentorAllocation.css is imported AFTER App.css and defines its
+                own .ma-label / .ma-field, so page rules written as bare class
+                selectors lost to it and the fields overlapped. Every rule is
+                written as ".ms-form .ma-field" - two classes beats one on
+                specificity, so import order stops mattering. */}
+            <div className="ma-two ms-form">
+              {/* ---------------- grade thresholds ---------------- */}
+              <div className="ma-panel">
+                <div className="ma-panel-head">
+                  <div>
+                    <h3>Grade thresholds</h3>
+                    <p>Computed from published semester results, on a 10-point scale</p>
+                  </div>
+                </div>
+                <div className="ma-panel-body">
+                  <div className="ma-field">
+                    <label className="ma-label" htmlFor="band_a_min">Grade A from</label>
+                    <div className="ma-inline">
+                      <input
+                        id="band_a_min"
+                        className="ma-input narrow"
+                        type="number" step="0.1" min="0" max="10"
+                        value={form.band_a_min}
+                        onChange={(e) => set("band_a_min", e.target.value)}
+                      />
+                      <span className="ma-suffix">and above</span>
+                    </div>
+                  </div>
+
+                  <div className="ma-field">
+                    <label className="ma-label" htmlFor="band_b_min">Grade B from</label>
+                    <div className="ma-inline">
+                      <input
+                        id="band_b_min"
+                        className="ma-input narrow"
+                        type="number" step="0.1" min="0" max="10"
+                        value={form.band_b_min}
+                        onChange={(e) => set("band_b_min", e.target.value)}
+                      />
+                      <span className="ma-suffix">
+                        up to {(Number(form.band_a_min) - 0.01).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="ma-note">
+                    <b>Grade C</b>
+                    Anything below {form.band_b_min}. There is no separate setting —
+                    it is whatever the other two leave behind.
+                  </div>
+
+                  <div className="ma-field">
+                    <label className="ma-label" htmlFor="first_year_rule">
+                      First-year students
+                    </label>
+                    <select
+                      id="first_year_rule"
+                      className="ma-input"
+                      value={form.first_year_rule}
+                      onChange={(e) => set("first_year_rule", e.target.value)}
+                    >
+                      <option value="defer">Allocate only after semester 1 results</option>
+                      <option value="band_b">Assign all first years band B</option>
+                    </select>
+                  </div>
+
+                  <div className="ma-note amber">
+                    <b>First years have no published result</b>
+                    There is no CGPA to compute a grade from, so this rule decides what
+                    happens to them.
+                    {form.allocate_from_year > 1 && (
+                      <>
+                        {" "}It has no effect while allocation starts from year{" "}
+                        {form.allocate_from_year}.
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
-            )}
 
-            {loading && (
-              <div className="ma-panel"><div className="ma-empty">Loading…</div></div>
-            )}
-
-            {!loading && form && (
-              <>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-
-                  {/* ================= GRADE THRESHOLDS ================= */}
-                  <div className="ma-panel">
-                    <div className="ma-panel-head">
-                      <div>
-                        <h3>Grade thresholds</h3>
-                        <p>Computed from published semester results, on a 10-point scale</p>
-                      </div>
-                    </div>
-                    <div className="ma-panel-body">
-                      <div style={{ marginBottom: 15 }}>
-                        <span className="ma-label">Grade A from</span>
-                        <input
-                          type="number" step="0.1" min="0" max="10"
-                          value={form.band_a_min}
-                          onChange={(e) => set("band_a_min", e.target.value)}
-                          style={{ padding: "9px 11px", border: "1px solid #e6e9ef", borderRadius: 9, width: 110 }}
-                        />
-                        <span style={{ marginLeft: 8, fontSize: 12.5, color: "#6b7280" }}>
-                          and above
-                        </span>
-                      </div>
-                      <div style={{ marginBottom: 15 }}>
-                        <span className="ma-label">Grade B from</span>
-                        <input
-                          type="number" step="0.1" min="0" max="10"
-                          value={form.band_b_min}
-                          onChange={(e) => set("band_b_min", e.target.value)}
-                          style={{ padding: "9px 11px", border: "1px solid #e6e9ef", borderRadius: 9, width: 110 }}
-                        />
-                        <span style={{ marginLeft: 8, fontSize: 12.5, color: "#6b7280" }}>
-                          up to {(Number(form.band_a_min) - 0.01).toFixed(2)}
-                        </span>
-                      </div>
-                      <div className="ma-note">
-                        <b>Grade C</b>
-                        Anything below {form.band_b_min}. There is no separate setting —
-                        it is whatever the other two leave behind.
-                      </div>
-
-                      <div style={{ marginTop: 15 }}>
-                        <span className="ma-label">First-year students</span>
-                        <select
-                          value={form.first_year_rule}
-                          onChange={(e) => set("first_year_rule", e.target.value)}
-                          style={{ padding: "9px 11px", border: "1px solid #e6e9ef", borderRadius: 9, width: "100%" }}
-                        >
-                          <option value="defer">Allocate only after semester 1 results</option>
-                          <option value="band_b">Assign all first years grade B</option>
-                        </select>
-                        <div className="ma-note amber" style={{ marginTop: 9 }}>
-                          <b>First years have no published result</b>
-                          There is no CGPA to compute a grade from, so this rule decides
-                          what happens to them.
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* ================= ALLOCATION RULES ================= */}
-                  <div className="ma-panel">
-                    <div className="ma-panel-head"><div><h3>Allocation rules</h3></div></div>
-                    <div className="ma-panel-body">
-                      <div style={{ marginBottom: 15 }}>
-                        <span className="ma-label">Maximum students per mentor</span>
-                        <input
-                          type="number" min="1" max="200"
-                          value={form.max_students_per_mentor}
-                          onChange={(e) => set("max_students_per_mentor", e.target.value)}
-                          style={{ padding: "9px 11px", border: "1px solid #e6e9ef", borderRadius: 9, width: 110 }}
-                        />
-                        <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 5 }}>
-                          Exceeding it shows a warning on the allocation bar. It never
-                          blocks the assignment.
-                        </div>
-                      </div>
-
-                      <div style={{ marginBottom: 15 }}>
-                        <label style={{ display: "flex", gap: 9, alignItems: "flex-start", fontSize: 13, cursor: "pointer" }}>
-                          <input
-                            type="checkbox"
-                            checked={form.require_all_bands}
-                            onChange={(e) => set("require_all_bands", e.target.checked)}
-                            style={{ marginTop: 3 }}
-                          />
-                          <span>
-                            <b>Every group must contain grade A, B and C students</b>
-                            <br />
-                            <span style={{ fontSize: 11.5, color: "#6b7280" }}>
-                              The Anna University composition rule. Turning this off
-                              removes the balance checks everywhere.
-                            </span>
-                          </span>
-                        </label>
-                      </div>
-
-                      <div style={{ marginBottom: 15 }}>
-                        <label style={{ display: "flex", gap: 9, alignItems: "flex-start", fontSize: 13, cursor: "pointer" }}>
-                          <input
-                            type="checkbox"
-                            checked={form.route_via_advisor}
-                            onChange={(e) => set("route_via_advisor", e.target.checked)}
-                            style={{ marginTop: 3 }}
-                          />
-                          <span>
-                            <b>Class advisor proposes, HOD approves</b>
-                            <br />
-                            <span style={{ fontSize: 11.5, color: "#6b7280" }}>
-                              Off means you allocate directly, with no proposal step.
-                            </span>
-                          </span>
-                        </label>
-                      </div>
-
-                      <button className="ma-btn primary" onClick={save} disabled={saving}>
-                        {saving ? "Saving…" : "Save settings"}
-                      </button>
-                      <button className="ma-btn" onClick={load} style={{ marginLeft: 8 }}>
-                        Cancel
-                      </button>
-                    </div>
+              {/* ---------------- allocation rules ---------------- */}
+              <div className="ma-panel">
+                <div className="ma-panel-head">
+                  <div>
+                    <h3>Allocation rules</h3>
+                    <p>Who gets allocated, and how it is approved</p>
                   </div>
                 </div>
+                <div className="ma-panel-body">
+                  <div className="ma-field">
+                    <label className="ma-label" htmlFor="allocate_from_year">
+                      Start allocating from
+                    </label>
+                    <select
+                      id="allocate_from_year"
+                      className="ma-input"
+                      value={form.allocate_from_year}
+                      onChange={(e) => set("allocate_from_year", Number(e.target.value))}
+                    >
+                      <option value={1}>I Year onwards</option>
+                      <option value={2}>II Year onwards</option>
+                      <option value={3}>III Year onwards</option>
+                      <option value={4}>IV Year only</option>
+                    </select>
+                    <span className="ma-hint">
+                      Students below this year do not appear on the allocation screens
+                      at all.
+                    </span>
+                  </div>
 
-                {/* ================= VISIBILITY ================= */}
-                <div className="ma-panel" style={{ marginTop: 16 }}>
-                  <div className="ma-panel-head">
-                    <div>
-                      <h3>Who can see the grade</h3>
-                      <p>An internal planning value, not a label for students</p>
+                  <div className="ma-field">
+                    <label className="ma-label" htmlFor="max_students_per_mentor">
+                      Maximum students per mentor
+                    </label>
+                    <input
+                      id="max_students_per_mentor"
+                      className="ma-input narrow"
+                      type="number" min="1" max="200"
+                      value={form.max_students_per_mentor}
+                      onChange={(e) => set("max_students_per_mentor", e.target.value)}
+                    />
+                    <span className="ma-hint">
+                      Exceeding it shows a warning on the allocation bar. It never
+                      blocks the assignment.
+                    </span>
+                  </div>
+
+                  {/* Read-only. This used to be a checkbox saved here, while team
+                      formation read MentorRule.grade_mix — two settings for one
+                      policy, and nothing kept them in step. A HOD could turn it
+                      off, get "Saved", and watch teams carry on enforcing it. The
+                      rule is the single source of truth now.
+
+                      The button goes to Team Proposals, which is where grade_mix
+                      is actually edited. It used to point at /hod/mentor-allocation,
+                      a screen that does not hold this setting. */}
+                  <div className="ma-field">
+                    <span className="ma-label">Group composition</span>
+                    <div className="ma-readonly">
+                      <span
+                        className={`ma-pill ${form.require_all_bands ? "ma-green" : "ma-grey"}`}
+                      >
+                        {form.require_all_bands ? "A, B and C required" : "No grade rule"}
+                      </span>
+                      <div className="ma-readonly-body">
+                        {form.require_all_bands
+                          ? "Every mentor group must hold a grade A, a grade B and a grade C student."
+                          : "Groups can hold any mix of grades."}
+                        <span className="ma-hint">
+                          Set per academic year on the Team Proposals screen, because
+                          team formation and direct allocation both read it there.
+                        </span>
+                      </div>
                     </div>
+                    <button
+                      className="ma-btn small ma-field-btn"
+                      onClick={() => navigate("/hod/team-proposals")}
+                    >
+                      Change the composition rule
+                    </button>
                   </div>
-                  <div className="ma-scroll">
-                    <table className="ma-table">
-                      <thead>
-                        <tr><th>Role</th><th>Sees the grade</th><th>Reason</th></tr>
-                      </thead>
-                      <tbody>
-                        <tr>
-                          <td><b>HOD</b></td>
-                          <td><span className="ma-pill ma-green">Yes</span></td>
-                          <td style={{ fontSize: 12, color: "#6b7280" }}>Needs it to form balanced groups</td>
-                        </tr>
-                        <tr>
-                          <td><b>Mentor</b></td>
-                          <td><span className="ma-pill ma-green">Yes</span></td>
-                          <td style={{ fontSize: 12, color: "#6b7280" }}>Their own group only</td>
-                        </tr>
-                        <tr>
-                          <td><b>Student</b></td>
-                          <td><span className="ma-pill ma-red">No</span></td>
-                          <td style={{ fontSize: 12, color: "#6b7280" }}>
-                            A visible A/B/C label on a person spreads between classmates
-                          </td>
-                        </tr>
-                        <tr>
-                          <td><b>Parent</b></td>
-                          <td><span className="ma-pill ma-red">No</span></td>
-                          <td style={{ fontSize: 12, color: "#6b7280" }}>Same reason</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                  <div className="ma-panel-foot">
-                    This is enforced in the API, not just hidden in the UI — the student
-                    endpoint never sends the grade field.
+
+                  <label className="ma-check-row">
+                    <input
+                      type="checkbox"
+                      checked={form.route_via_advisor}
+                      onChange={(e) => set("route_via_advisor", e.target.checked)}
+                    />
+                    <span className="ma-check-text">
+                      <b>Tutor proposes, HOD approves</b>
+                      <span className="ma-hint">
+                        Off means you allocate directly, with no proposal step.
+                      </span>
+                    </span>
+                  </label>
+
+                  <div className="ma-actions ma-form-actions">
+                    <button className="ma-btn primary" disabled={saving} onClick={submit}>
+                      {saving ? "Saving…" : "Save settings"}
+                    </button>
+                    <button className="ma-btn" disabled={saving} onClick={load}>
+                      Cancel
+                    </button>
                   </div>
                 </div>
-              </>
-            )}
+              </div>
+            </div>
 
           </div>
         </div>

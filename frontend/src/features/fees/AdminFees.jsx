@@ -1,6 +1,6 @@
 // frontend/src/features/fees/AdminFees.jsx
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import API from "../../api";
 import "../../App.css";
 import Sidebar from "../../components/Sidebar";
@@ -8,52 +8,94 @@ import Navbar from "../../components/Navbar";
 
 // ================= DESIGN TOKENS (match App.css) =================
 const BRAND = "#2848d8";
-const BRAND_DARK = "#1e3ac0";
 const INK = "#0f172a";
 const MUTED = "#64748b";
 const LINE = "#e8edf3";
 const HAIR = "#f1f5f9";
+
+// The name printed on the receipt. Move this to a settings endpoint when one
+// exists — a receipt with the wrong college name on it is worse than none.
+const COLLEGE_NAME = "College of Engineering";
+const COLLEGE_LINE2 = "Affiliated to Anna University";
 
 // ================= HELPERS =================
 const money = (n) => "₹" + Number(n || 0).toLocaleString("en-IN");
 const ini = (name) =>
   (name || "?").split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
 
+const owed = (f) => Number(f.amount || 0) - Number(f.paid_amount || 0);
+
+const onDate = (iso) => {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+};
+
 function getStatus(fee) {
   if (fee.status === "paid") return "paid";
   const today = new Date();
   const due = fee.due_date ? new Date(fee.due_date) : null;
   if (due && due < today) return "overdue";
+  if (Number(fee.paid_amount || 0) > 0) return "partial";
   return "pending";
 }
 
-const STATUS_ORDER = ["overdue", "pending", "paid"];
+const STATUS_ORDER = ["overdue", "partial", "pending", "paid"];
 
 const SM = {
-  paid:    { label: "Paid",    bg: "#ecfdf3", color: "#15803d", bar: "#16a34a" },
-  pending: { label: "Pending", bg: "#fff7ed", color: "#b45309", bar: "#f59e0b" },
-  overdue: { label: "Overdue", bg: "#fef2f2", color: "#b91c1c", bar: "#ef4444" },
+  paid:    { label: "Paid",      bg: "#ecfdf3", color: "#15803d", bar: "#16a34a" },
+  partial: { label: "Part paid", bg: "#eff6ff", color: "#1d4ed8", bar: "#3b82f6" },
+  pending: { label: "Pending",   bg: "#fff7ed", color: "#b45309", bar: "#f59e0b" },
+  overdue: { label: "Overdue",   bg: "#fef2f2", color: "#b91c1c", bar: "#ef4444" },
 };
 
-const AV_BG = { paid: "#ecfdf3", pending: "#fff7ed", overdue: "#fef2f2" };
-const AV_TC = { paid: "#15803d", pending: "#b45309", overdue: "#b91c1c" };
+const AV_BG = { paid: "#ecfdf3", partial: "#eff6ff", pending: "#fff7ed", overdue: "#fef2f2" };
+const AV_TC = { paid: "#15803d", partial: "#1d4ed8", pending: "#b45309", overdue: "#b91c1c" };
 const GM = {
-  overdue: { label: "Overdue", rowBg: "#fef2f2", rowColor: "#b91c1c" },
-  pending: { label: "Pending", rowBg: "#fff7ed", rowColor: "#b45309" },
-  paid:    { label: "Paid",    rowBg: "#ecfdf3", rowColor: "#15803d" },
+  overdue: { label: "Overdue",   rowBg: "#fef2f2", rowColor: "#b91c1c" },
+  partial: { label: "Part paid", rowBg: "#eff6ff", rowColor: "#1d4ed8" },
+  pending: { label: "Pending",   rowBg: "#fff7ed", rowColor: "#b45309" },
+  paid:    { label: "Paid",      rowBg: "#ecfdf3", rowColor: "#15803d" },
 };
 
 const DEPT_COLORS = ["#2848d8","#0ea5e9","#8b5cf6","#10b981","#f59e0b","#ef4444","#06b6d4","#84cc16"];
 
-const FEE_TYPES = ["Tuition", "Van fees", "Exam fees", "Lab fees", "Library", "Hostel"];
+// Must match FeePayment.MODE_CHOICES on the server.
+const PAY_MODES = [
+  { value: "cash", label: "Cash" },
+  { value: "upi", label: "UPI" },
+  { value: "card", label: "Card" },
+  { value: "cheque", label: "Cheque" },
+  { value: "dd", label: "Demand Draft" },
+  { value: "netbanking", label: "Net banking" },
+];
+
+// Modes where a reference is what makes the payment traceable later. Cash has
+// nothing to quote, so asking for one there is pure friction.
+const MODE_NEEDS_REF = ["upi", "cheque", "dd", "netbanking", "card"];
+const REF_LABEL = {
+  upi: "UPI transaction ID",
+  cheque: "Cheque number",
+  dd: "DD number",
+  netbanking: "Transaction reference",
+  card: "Approval code",
+};
+
+const FEE_TYPE_SUGGESTIONS = [
+  "Tuition", "Semester Exam Fee", "Van fees", "Lab fees", "Library", "Hostel",
+];
 const YEARS = [1, 2, 3, 4];
 
-// ================= SHARED MODAL STYLES =================
+// ================= SHARED STYLES =================
 const overlayStyle = {
   position: "fixed", inset: 0, background: "rgba(15,23,42,.5)", zIndex: 1100,
   display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
 };
-const modalStyle = { background: "#fff", borderRadius: 14, width: "100%", maxWidth: 480, overflow: "hidden", boxShadow: "0 20px 50px rgba(16,24,40,.18)" };
+const modalStyle = {
+  background: "#fff", borderRadius: 14, width: "100%", maxWidth: 480,
+  overflow: "hidden", boxShadow: "0 20px 50px rgba(16,24,40,.18)",
+};
 const modalHeadStyle = {
   padding: "18px 20px 14px", borderBottom: `1px solid ${HAIR}`,
   display: "flex", justifyContent: "space-between", alignItems: "center",
@@ -62,7 +104,10 @@ const inputStyle = {
   width: "100%", padding: "10px 12px", borderRadius: 9,
   border: "1px solid #e2e8f0", fontSize: 14, color: INK, boxSizing: "border-box",
 };
-const labelStyle = { display: "block", fontSize: 12.5, fontWeight: 500, color: MUTED, marginBottom: 6 };
+const labelStyle = {
+  display: "block", fontSize: 12.5, fontWeight: 500, color: MUTED, marginBottom: 6,
+};
+const req = <span style={{ color: "#dc2626" }}> *</span>;
 const closeBtnStyle = {
   width: 30, height: 30, borderRadius: "50%", border: "1px solid #e2e8f0",
   background: "#f8fafc", cursor: "pointer", fontSize: 16, color: MUTED,
@@ -77,52 +122,631 @@ const cancelBtn = {
   padding: "10px 18px", borderRadius: 9, border: "1px solid #e2e8f0",
   background: "#fff", fontSize: 14, fontWeight: 500, cursor: "pointer", color: "#475569",
 };
+const cardStyle = {
+  background: "#fff", borderRadius: 14, border: `1px solid ${LINE}`,
+  boxShadow: "0 1px 3px rgba(16,24,40,.04)",
+};
 
-// ================= GROUPED LIST =================
-function GroupedList({ fees, onEdit, compact = false }) {
-  const sorted = [...fees].sort(
-    (a, b) => STATUS_ORDER.indexOf(getStatus(a)) - STATUS_ORDER.indexOf(getStatus(b))
-  );
-  const groups = { overdue: [], pending: [], paid: [] };
-  sorted.forEach((f) => { const s = getStatus(f); if (groups[s]) groups[s].push(f); });
+// ================= RECEIPT =================
+// Printed from a separate window rather than a hidden div. The app stylesheet
+// fights print layout, and a popup starts clean with nothing inherited.
+function printReceipt({ student, payment, fee }) {
+  const w = window.open("", "_blank", "width=760,height=900");
+  if (!w) {
+    alert("Allow pop-ups for this site to print the receipt.");
+    return;
+  }
 
-  if (!fees.length) return (
-    <div style={{ padding: 30, textAlign: "center", color: "#94a3b8", fontSize: 14 }}>
-      No students found
+  w.document.write(`
+<!doctype html>
+<html><head><title>Receipt ${payment.receipt_no || ""}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+         color: #0f172a; margin: 0; padding: 34px 40px; font-size: 13px; }
+  .head { text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 14px; }
+  .head h1 { margin: 0 0 3px; font-size: 19px; letter-spacing: .4px; }
+  .head p { margin: 0; font-size: 12px; color: #475569; }
+  .title { margin: 18px 0 4px; text-align: center; font-size: 14px;
+           font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; }
+  .meta { display: flex; justify-content: space-between; margin: 18px 0 6px; font-size: 12.5px; }
+  .meta div { line-height: 1.9; }
+  .k { color: #64748b; display: inline-block; min-width: 108px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+  th, td { border: 1px solid #cbd5e1; padding: 8px 10px; text-align: left; }
+  th { background: #f1f5f9; font-size: 11.5px; text-transform: uppercase; letter-spacing: .5px; }
+  .r { text-align: right; }
+  .paid { margin-top: 18px; border: 2px solid #0f172a; padding: 12px 14px;
+          display: flex; justify-content: space-between; align-items: center; }
+  .paid b { font-size: 17px; }
+  .foot { margin-top: 46px; display: flex; justify-content: space-between;
+          font-size: 12px; color: #475569; }
+  .sign { border-top: 1px solid #94a3b8; padding-top: 5px; min-width: 190px; text-align: center; }
+  .note { margin-top: 26px; font-size: 10.5px; color: #94a3b8; text-align: center;
+          border-top: 1px dashed #cbd5e1; padding-top: 10px; }
+  @media print { body { padding: 20px 26px; } }
+</style></head>
+<body>
+  <div class="head">
+    <h1>${COLLEGE_NAME}</h1>
+    <p>${COLLEGE_LINE2}</p>
+  </div>
+
+  <div class="title">Fee Receipt</div>
+
+  <div class="meta">
+    <div>
+      <span class="k">Receipt No</span><b>${payment.receipt_no || "—"}</b><br/>
+      <span class="k">Date</span>${onDate(payment.paid_on)}<br/>
+      <span class="k">Mode</span>${payment.mode_label || payment.mode || "—"}
+      ${payment.reference ? `<br/><span class="k">Reference</span>${payment.reference}` : ""}
+    </div>
+    <div>
+      <span class="k">Student</span><b>${student.username}</b><br/>
+      <span class="k">Register No</span>${student.roll_number || "—"}<br/>
+      <span class="k">Course</span>${student.course_name || "—"}<br/>
+      <span class="k">Year / Sem</span>${student.year || "—"} / ${student.semester || "—"}
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr><th>Particulars</th><th class="r">Amount</th>
+          <th class="r">Paid to date</th><th class="r">Balance</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>${fee.term || "Fee"}</td>
+        <td class="r">${money(fee.amount)}</td>
+        <td class="r">${money(Number(fee.paid_amount || 0))}</td>
+        <td class="r">${money(owed(fee))}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="paid">
+    <span>Amount received now</span>
+    <b>${money(payment.amount)}</b>
+  </div>
+
+  <div class="foot">
+    <div>
+      Received by: ${payment.recorded_by || "—"}<br/>
+      Printed: ${new Date().toLocaleString("en-IN")}
+    </div>
+    <div class="sign">Authorised Signatory</div>
+  </div>
+
+  <div class="note">
+    This is a computer-generated receipt. Please retain it for your records.
+    Cheques and demand drafts are subject to realisation.
+  </div>
+
+  <script>window.onload = function () { window.print(); };</script>
+</body></html>`);
+  w.document.close();
+}
+
+// ================= COLLECT: STUDENT SEARCH =================
+function StudentSearch({ onPick, busy }) {
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState(null);
+  const [searching, setSearching] = useState(false);
+  const inputRef = useRef(null);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  const run = async () => {
+    const term = q.trim();
+    if (!term) return;
+    setSearching(true);
+    try {
+      const res = await API.get(`fee-ledger/?q=${encodeURIComponent(term)}`);
+      setResults(res.data?.results || []);
+    } catch {
+      setResults([]);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  return (
+    <div style={{ ...cardStyle, padding: 22 }}>
+      <div style={{ fontSize: 16, fontWeight: 600, color: INK, marginBottom: 4 }}>
+        Who is paying?
+      </div>
+      <div style={{ fontSize: 13, color: MUTED, marginBottom: 16 }}>
+        Search by register number or name. Everything they owe appears in one place.
+      </div>
+
+      <div style={{ display: "flex", gap: 10, maxWidth: 560 }}>
+        <input
+          ref={inputRef}
+          style={{ ...inputStyle, fontSize: 15 }}
+          placeholder="e.g. 26ME001 or Aarthi"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && run()}
+        />
+        <button
+          style={{ ...primaryBtn(!!q.trim() && !busy), whiteSpace: "nowrap" }}
+          disabled={!q.trim() || busy || searching}
+          onClick={run}
+        >
+          {searching ? "Searching…" : "Search"}
+        </button>
+      </div>
+
+      {results !== null && (
+        <div style={{ marginTop: 18 }}>
+          {results.length === 0 ? (
+            <div style={{ fontSize: 13.5, color: MUTED }}>
+              No student matches “{q}”. Check the register number.
+            </div>
+          ) : (
+            <>
+              <div style={{ fontSize: 12, color: MUTED, marginBottom: 8 }}>
+                {results.length} match{results.length === 1 ? "" : "es"}
+              </div>
+              <div style={{ display: "grid", gap: 8 }}>
+                {results.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => onPick(s.id)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 14, width: "100%",
+                      padding: "12px 14px", borderRadius: 11, cursor: "pointer",
+                      border: `1px solid ${LINE}`, background: "#fff", textAlign: "left",
+                    }}
+                  >
+                    <span style={{
+                      width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
+                      background: s.outstanding > 0 ? "#fff7ed" : "#ecfdf3",
+                      color: s.outstanding > 0 ? "#b45309" : "#15803d",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 12, fontWeight: 600,
+                    }}>
+                      {ini(s.username)}
+                    </span>
+                    <span style={{ flex: 1 }}>
+                      <span style={{ display: "block", fontSize: 14, fontWeight: 600, color: INK }}>
+                        {s.username}
+                      </span>
+                      <span style={{ display: "block", fontSize: 12, color: MUTED, marginTop: 2 }}>
+                        {s.roll_number || "—"} · {s.course_name || "—"} · Year {s.year} Sem {s.semester}
+                      </span>
+                    </span>
+                    <span style={{ textAlign: "right" }}>
+                      {s.outstanding > 0 ? (
+                        <>
+                          <span style={{ display: "block", fontSize: 14, fontWeight: 600, color: "#b45309" }}>
+                            {money(s.outstanding)}
+                          </span>
+                          <span style={{ fontSize: 11, color: MUTED }}>outstanding</span>
+                        </>
+                      ) : (
+                        <span style={{
+                          padding: "4px 12px", borderRadius: 999, fontSize: 12,
+                          background: "#ecfdf3", color: "#15803d", fontWeight: 500,
+                        }}>
+                          All clear
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
+}
+
+// ================= COLLECT: ONE STUDENT'S LEDGER =================
+function Ledger({ ledger, onBack, onCollect, busy }) {
+  const { student, summary, fees } = ledger;
+  const unpaid = fees.filter((f) => owed(f) > 0);
+  const settled = fees.filter((f) => owed(f) <= 0);
+  const [openHistory, setOpenHistory] = useState({});
 
   return (
     <>
-      {STATUS_ORDER.map((g) => {
-        if (!groups[g].length) return null;
-        const m = GM[g];
-        return (
-          <div key={g}>
-            <div style={{
-              padding: "8px 18px", fontSize: 11, fontWeight: 600,
-              letterSpacing: 0, textTransform: "none",
-              background: m.rowBg, color: m.rowColor,
-              borderBottom: `1px solid ${HAIR}`,
-            }}>
-              {m.label} — {groups[g].length} student{groups[g].length > 1 ? "s" : ""}
-            </div>
-            {groups[g].map((fee) => (
-              <StuRow key={fee.id} fee={fee} onEdit={onEdit} compact={compact} />
-            ))}
+      <button style={{ ...cancelBtn, marginBottom: 14 }} onClick={onBack}>
+        ← Another student
+      </button>
+
+      {/* who is at the counter */}
+      <div style={{ ...cardStyle, padding: 20, marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+          <div style={{
+            width: 52, height: 52, borderRadius: "50%", background: "#eef2ff",
+            color: BRAND, display: "flex", alignItems: "center",
+            justifyContent: "center", fontSize: 17, fontWeight: 600,
+          }}>
+            {ini(student.username)}
           </div>
-        );
-      })}
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 600, color: INK }}>{student.username}</div>
+            <div style={{ fontSize: 12.5, color: MUTED, marginTop: 3 }}>
+              {student.roll_number || "—"} · {student.course_name || "—"} ·
+              {" "}Year {student.year} Semester {student.semester}
+              {student.batch_year ? ` · Batch ${student.batch_year}` : ""}
+            </div>
+          </div>
+          <div style={{ flex: 1 }} />
+          <div style={{ display: "flex", gap: 26, textAlign: "right", flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: 11.5, color: MUTED }}>Billed</div>
+              <div style={{ fontSize: 17, fontWeight: 600, color: INK }}>
+                {money(summary.billed)}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11.5, color: MUTED }}>Paid</div>
+              <div style={{ fontSize: 17, fontWeight: 600, color: "#15803d" }}>
+                {money(summary.collected)}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11.5, color: MUTED }}>Outstanding</div>
+              <div style={{
+                fontSize: 17, fontWeight: 600,
+                color: summary.outstanding > 0 ? "#b45309" : "#15803d",
+              }}>
+                {money(summary.outstanding)}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* what they owe — the reason they are standing there */}
+      <div style={{ ...cardStyle, overflow: "hidden", marginBottom: 16 }}>
+        <div style={{ padding: "14px 18px", borderBottom: `1px solid ${HAIR}` }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: INK }}>
+            Outstanding dues
+            {unpaid.length > 0 && (
+              <span style={{ fontWeight: 400, color: MUTED, fontSize: 13 }}>
+                {" "}— {unpaid.length} head{unpaid.length === 1 ? "" : "s"}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {unpaid.length === 0 ? (
+          <div style={{ padding: 30, textAlign: "center" }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: "#15803d", marginBottom: 4 }}>
+              Nothing outstanding
+            </div>
+            <div style={{ fontSize: 13, color: MUTED }}>
+              This student has paid every fee raised against them.
+            </div>
+          </div>
+        ) : (
+          unpaid.map((f) => {
+            const st = getStatus(f);
+            const m = SM[st];
+            return (
+              <div key={f.id} style={{
+                display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap",
+                padding: "14px 18px", borderBottom: `1px solid ${HAIR}`,
+              }}>
+                <div style={{ flex: 1, minWidth: 180 }}>
+                  <div style={{ fontSize: 14.5, fontWeight: 600, color: INK }}>{f.term}</div>
+                  <div style={{ fontSize: 12, color: MUTED, marginTop: 3 }}>
+                    Due {onDate(f.due_date)}
+                    {Number(f.paid_amount) > 0 &&
+                      ` · ${money(f.paid_amount)} of ${money(f.amount)} received`}
+                  </div>
+                </div>
+                <span style={{
+                  padding: "3px 11px", borderRadius: 999, fontSize: 11.5,
+                  fontWeight: 500, background: m.bg, color: m.color,
+                }}>
+                  {m.label}
+                </span>
+                <div style={{ textAlign: "right", minWidth: 110 }}>
+                  <div style={{ fontSize: 16, fontWeight: 600, color: "#b45309" }}>
+                    {money(owed(f))}
+                  </div>
+                  <div style={{ fontSize: 11, color: MUTED }}>to pay</div>
+                </div>
+                <button style={primaryBtn(!busy)} disabled={busy} onClick={() => onCollect(f)}>
+                  Collect
+                </button>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* already settled, with the receipts behind each one */}
+      {settled.length > 0 && (
+        <div style={{ ...cardStyle, overflow: "hidden" }}>
+          <div style={{ padding: "14px 18px", borderBottom: `1px solid ${HAIR}` }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: INK }}>
+              Already settled
+              <span style={{ fontWeight: 400, color: MUTED, fontSize: 13 }}>
+                {" "}— {settled.length}
+              </span>
+            </div>
+          </div>
+          {settled.map((f) => (
+            <div key={f.id} style={{ borderBottom: `1px solid ${HAIR}` }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 18px" }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 500, color: INK }}>{f.term}</div>
+                  <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>
+                    Paid {onDate(f.paid_date)}
+                  </div>
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "#15803d" }}>
+                  {money(f.amount)}
+                </div>
+                <button
+                  style={{ ...cancelBtn, padding: "6px 12px", fontSize: 12.5 }}
+                  onClick={() => setOpenHistory((p) => ({ ...p, [f.id]: !p[f.id] }))}
+                >
+                  {openHistory[f.id] ? "Hide" : "Receipts"}
+                </button>
+              </div>
+
+              {openHistory[f.id] && (
+                <div style={{ padding: "0 18px 14px", background: "#fbfcfd" }}>
+                  {(f.payments || []).length === 0 ? (
+                    <div style={{ fontSize: 12.5, color: "#b45309", padding: "10px 0" }}>
+                      No payment record behind this fee. It was marked paid directly,
+                      before payments were recorded properly — there is no receipt to
+                      reprint.
+                    </div>
+                  ) : (
+                    <table style={{ width: "100%", fontSize: 12.5, borderCollapse: "collapse" }}>
+                      <thead>
+                        <tr style={{ color: MUTED, textAlign: "left" }}>
+                          <th style={{ padding: "8px 0", fontWeight: 500 }}>Receipt</th>
+                          <th style={{ padding: "8px 0", fontWeight: 500 }}>Date</th>
+                          <th style={{ padding: "8px 0", fontWeight: 500 }}>Mode</th>
+                          <th style={{ padding: "8px 0", fontWeight: 500 }}>Reference</th>
+                          <th style={{ padding: "8px 0", fontWeight: 500, textAlign: "right" }}>Amount</th>
+                          <th />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {f.payments.map((p) => (
+                          <tr key={p.id} style={{ borderTop: `1px solid ${HAIR}` }}>
+                            <td style={{ padding: "8px 0" }}><b>{p.receipt_no || "—"}</b></td>
+                            <td style={{ padding: "8px 0" }}>{onDate(p.paid_on)}</td>
+                            <td style={{ padding: "8px 0" }}>{p.mode_label}</td>
+                            <td style={{ padding: "8px 0", color: MUTED }}>{p.reference || "—"}</td>
+                            <td style={{ padding: "8px 0", textAlign: "right" }}>
+                              <b>{money(p.amount)}</b>
+                            </td>
+                            <td style={{ padding: "8px 0", textAlign: "right" }}>
+                              <button
+                                style={{
+                                  border: "none", background: "none", color: BRAND,
+                                  cursor: "pointer", fontSize: 12.5, padding: 0,
+                                }}
+                                onClick={() => printReceipt({ student, payment: p, fee: f })}
+                              >
+                                Print
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </>
   );
 }
 
-// ================= STUDENT ROW =================
+// ================= COLLECT MODAL =================
+function CollectModal({ fee, student, onClose, onDone, busy }) {
+  const left = owed(fee);
+  const [form, setForm] = useState({
+    amount: String(left), mode: "cash", reference: "", remarks: "",
+  });
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const amt = Number(form.amount || 0);
+  const tooMuch = amt > left;
+  const needsRef = MODE_NEEDS_REF.includes(form.mode);
+  const missingRef = needsRef && !form.reference.trim();
+  const ready = amt > 0 && !tooMuch && !missingRef;
+
+  return (
+    <div style={overlayStyle} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ ...modalStyle, maxWidth: 520 }}>
+        <div style={modalHeadStyle}>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: INK }}>Collect payment</div>
+            <div style={{ fontSize: 12.5, color: MUTED, marginTop: 2 }}>
+              {student.username} · {student.roll_number} · {fee.term}
+            </div>
+          </div>
+          <button onClick={onClose} style={closeBtnStyle}>✕</button>
+        </div>
+
+        <div style={{ padding: 20 }}>
+          <div style={{
+            background: "#f8fafc", borderRadius: 10, padding: 14, marginBottom: 18,
+            display: "flex", justifyContent: "space-between", fontSize: 13,
+          }}>
+            <div>
+              <div style={{ color: MUTED, marginBottom: 3 }}>Fee</div>
+              <b style={{ color: INK }}>{money(fee.amount)}</b>
+            </div>
+            <div>
+              <div style={{ color: MUTED, marginBottom: 3 }}>Already paid</div>
+              <b style={{ color: "#15803d" }}>{money(fee.paid_amount)}</b>
+            </div>
+            <div>
+              <div style={{ color: MUTED, marginBottom: 3 }}>Balance</div>
+              <b style={{ color: "#b45309" }}>{money(left)}</b>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label style={labelStyle}>Amount received (₹){req}</label>
+            <input
+              style={{
+                ...inputStyle, fontSize: 18, fontWeight: 600,
+                borderColor: tooMuch ? "#fca5a5" : "#e2e8f0",
+              }}
+              type="number"
+              autoFocus
+              value={form.amount}
+              onChange={(e) => set("amount", e.target.value)}
+            />
+            {tooMuch ? (
+              <div style={{ fontSize: 12, color: "#b91c1c", marginTop: 6 }}>
+                More than the {money(left)} outstanding.
+              </div>
+            ) : (
+              <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                <button
+                  style={{
+                    ...cancelBtn, padding: "5px 12px", fontSize: 12,
+                    borderColor: amt === left ? BRAND : "#e2e8f0",
+                    color: amt === left ? BRAND : "#475569",
+                  }}
+                  onClick={() => set("amount", String(left))}
+                >
+                  Full {money(left)}
+                </button>
+                <button
+                  style={{ ...cancelBtn, padding: "5px 12px", fontSize: 12 }}
+                  onClick={() => set("amount", String(Math.round(left / 2)))}
+                >
+                  Half
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label style={labelStyle}>How was it paid?{req}</label>
+            <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+              {PAY_MODES.map((m) => (
+                <button
+                  key={m.value}
+                  onClick={() => set("mode", m.value)}
+                  style={{
+                    padding: "7px 15px", borderRadius: 999, fontSize: 13,
+                    cursor: "pointer", fontWeight: 500,
+                    background: form.mode === m.value ? BRAND : "#fff",
+                    color: form.mode === m.value ? "#fff" : "#475569",
+                    border: `1px solid ${form.mode === m.value ? BRAND : "#e2e8f0"}`,
+                  }}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* cash has no reference to quote, so it is never asked for */}
+          {needsRef && (
+            <div style={{ marginBottom: 16 }}>
+              <label style={labelStyle}>{REF_LABEL[form.mode]}{req}</label>
+              <input
+                style={{ ...inputStyle, borderColor: missingRef ? "#fcd34d" : "#e2e8f0" }}
+                placeholder={
+                  form.mode === "cheque" ? "Cheque number and bank"
+                    : form.mode === "upi" ? "12-digit UPI reference"
+                    : "Reference number"
+                }
+                value={form.reference}
+                onChange={(e) => set("reference", e.target.value)}
+              />
+              {missingRef && (
+                <div style={{ fontSize: 12, color: "#b45309", marginTop: 5 }}>
+                  Needed so the payment can be traced back later.
+                </div>
+              )}
+            </div>
+          )}
+
+          <div>
+            <label style={labelStyle}>Remarks</label>
+            <input
+              style={inputStyle}
+              placeholder="Optional"
+              value={form.remarks}
+              onChange={(e) => set("remarks", e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div style={{ padding: "0 20px 20px", display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button onClick={onClose} style={cancelBtn}>Cancel</button>
+          <button
+            disabled={!ready || busy}
+            onClick={() => onDone(fee, form)}
+            style={primaryBtn(ready && !busy)}
+          >
+            {busy ? "Saving…" : `Receive ${money(amt)}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ================= AFTER PAYMENT =================
+function DoneModal({ student, payment, fee, onClose }) {
+  return (
+    <div style={overlayStyle} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ ...modalStyle, maxWidth: 430 }}>
+        <div style={{ padding: "28px 24px 20px", textAlign: "center" }}>
+          <div style={{
+            width: 54, height: 54, borderRadius: "50%", background: "#ecfdf3",
+            color: "#15803d", fontSize: 26, margin: "0 auto 14px",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            ✓
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 600, color: INK }}>
+            {money(payment.amount)} received
+          </div>
+          <div style={{ fontSize: 13, color: MUTED, marginTop: 5 }}>
+            {student.username} · {fee.term}
+          </div>
+          <div style={{
+            marginTop: 16, padding: "10px 14px", borderRadius: 9,
+            background: "#f8fafc", fontSize: 13, display: "inline-block",
+          }}>
+            Receipt <b>{payment.receipt_no || "—"}</b> · {payment.mode_label}
+          </div>
+        </div>
+        <div style={{ padding: "0 24px 24px", display: "flex", gap: 10, justifyContent: "center" }}>
+          <button style={primaryBtn(true)} onClick={() => printReceipt({ student, payment, fee })}>
+            Print receipt
+          </button>
+          <button style={cancelBtn} onClick={onClose}>Done</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ================= ALL FEES: ROW + GROUPED LIST =================
 function StuRow({ fee, onEdit, compact }) {
   const status = getStatus(fee);
   const m = SM[status];
-  const pct = fee.status === "paid" ? 100 :
-    fee.amount > 0 ? Math.round((Number(fee.paid_amount || 0) / Number(fee.amount)) * 100) : 0;
+  const pct = fee.amount > 0
+    ? Math.round((Number(fee.paid_amount || 0) / Number(fee.amount)) * 100)
+    : 0;
+  const left = owed(fee);
 
   return (
     <div style={{
@@ -155,12 +779,16 @@ function StuRow({ fee, onEdit, compact }) {
           <span style={{ fontSize: 11, fontWeight: 600, minWidth: 28, color: m.bar }}>{pct}%</span>
         </div>
       </div>
-      <div style={{ textAlign: "right", flexShrink: 0 }}>
+      <div style={{ textAlign: "right", flexShrink: 0, minWidth: 128 }}>
         <div style={{ fontSize: 13.5, fontWeight: 600, color: INK }}>{money(fee.amount)}</div>
-        <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>Due: {fee.due_date || "—"}</div>
-        {fee.extended_date && (
-          <div style={{ fontSize: 11, color: "#b45309", fontWeight: 500 }}>Ext: {fee.extended_date}</div>
+        {left > 0 && Number(fee.paid_amount || 0) > 0 && (
+          <div style={{ fontSize: 11, color: "#1d4ed8", fontWeight: 500, marginTop: 2 }}>
+            {money(left)} still owed
+          </div>
         )}
+        <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+          Due {onDate(fee.due_date)}
+        </div>
         <span style={{
           display: "inline-block", padding: "3px 11px", borderRadius: 999,
           fontSize: 11.5, fontWeight: 500, marginTop: 4,
@@ -172,9 +800,9 @@ function StuRow({ fee, onEdit, compact }) {
       <button
         onClick={() => onEdit(fee)}
         style={{
-          padding: "7px 14px", borderRadius: 9, border: "none",
+          padding: "7px 14px", borderRadius: 9, border: "none", marginLeft: 12,
           background: "#eef2ff", fontSize: 13, fontWeight: 500,
-          cursor: "pointer", color: BRAND, marginLeft: 12,
+          cursor: "pointer", color: BRAND,
         }}
       >
         Edit
@@ -183,12 +811,49 @@ function StuRow({ fee, onEdit, compact }) {
   );
 }
 
-// ================= CSV DOWNLOAD =================
+function GroupedList({ fees, onEdit, compact = false }) {
+  const sorted = [...fees].sort(
+    (a, b) => STATUS_ORDER.indexOf(getStatus(a)) - STATUS_ORDER.indexOf(getStatus(b))
+  );
+  const groups = { overdue: [], partial: [], pending: [], paid: [] };
+  sorted.forEach((f) => { const s = getStatus(f); if (groups[s]) groups[s].push(f); });
+
+  if (!fees.length) return (
+    <div style={{ padding: 30, textAlign: "center", color: "#94a3b8", fontSize: 14 }}>
+      No fee matches these filters
+    </div>
+  );
+
+  return (
+    <>
+      {STATUS_ORDER.map((g) => {
+        if (!groups[g].length) return null;
+        const m = GM[g];
+        return (
+          <div key={g}>
+            <div style={{
+              padding: "8px 18px", fontSize: 11, fontWeight: 600,
+              background: m.rowBg, color: m.rowColor,
+              borderBottom: `1px solid ${HAIR}`,
+            }}>
+              {m.label} — {groups[g].length} fee{groups[g].length > 1 ? "s" : ""}
+            </div>
+            {groups[g].map((fee) => (
+              <StuRow key={fee.id} fee={fee} onEdit={onEdit} compact={compact} />
+            ))}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+// ================= CSV =================
 function downloadCSV(fees, filename) {
-  const header = "Name,Department,Term,Total (₹),Due Date,Extended Date,Status\n";
+  const header = "Name,Department,Term,Total,Paid,Still owed,Due Date,Status\n";
   const rows = fees.map((f) => {
     const s = getStatus(f);
-    return `"${f.student_name || ""}","${f.department || ""}","${f.term || ""}",${f.amount},"${f.due_date || ""}","${f.extended_date || "-"}","${SM[s]?.label || s}"`;
+    return `"${f.student_name || ""}","${f.department || ""}","${f.term || ""}",${f.amount},${f.paid_amount || 0},${owed(f)},"${f.due_date || ""}","${SM[s]?.label || s}"`;
   });
   const blob = new Blob([header + rows.join("\n")], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
@@ -207,6 +872,7 @@ function DeptModal({ dept, fees, onClose, onEdit }) {
   const filtered = mf === "all" ? dFees : dFees.filter((f) => getStatus(f) === mf);
   const counts = {
     overdue: dFees.filter((f) => getStatus(f) === "overdue").length,
+    partial: dFees.filter((f) => getStatus(f) === "partial").length,
     pending: dFees.filter((f) => getStatus(f) === "pending").length,
     paid:    dFees.filter((f) => f.status === "paid").length,
   };
@@ -217,26 +883,25 @@ function DeptModal({ dept, fees, onClose, onEdit }) {
   const pills = [
     { key: "all",     bg: "#eef2ff", color: BRAND,     border: BRAND,     label: `All (${dFees.length})` },
     { key: "overdue", bg: "#fef2f2", color: "#b91c1c", border: "#dc2626", label: `Overdue (${counts.overdue})` },
+    { key: "partial", bg: "#eff6ff", color: "#1d4ed8", border: "#3b82f6", label: `Part paid (${counts.partial})` },
     { key: "pending", bg: "#fff7ed", color: "#b45309", border: "#f59e0b", label: `Pending (${counts.pending})` },
     { key: "paid",    bg: "#ecfdf3", color: "#15803d", border: "#16a34a", label: `Paid (${counts.paid})` },
   ];
 
   const dlLabel = mf === "paid" ? null
-    : mf === "all" ? "Download unpaid & pending"
-    : `Download ${mf} list`;
+    : mf === "all" ? "Download everything unpaid"
+    : `Download ${GM[mf]?.label.toLowerCase() || mf} list`;
 
   return (
-    <div
-      style={{ ...overlayStyle, zIndex: 1000 }}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div style={{ ...modalStyle, maxWidth: 620, maxHeight: "80vh", display: "flex", flexDirection: "column" }}>
+    <div style={{ ...overlayStyle, zIndex: 1000 }}
+      onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ ...modalStyle, maxWidth: 660, maxHeight: "80vh", display: "flex", flexDirection: "column" }}>
         <div style={{ padding: "18px 20px 14px", borderBottom: `1px solid ${HAIR}`, flexShrink: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
             <div>
               <div style={{ fontSize: 17, fontWeight: 600, color: INK }}>{dept.name}</div>
               <div style={{ fontSize: 12.5, color: MUTED, marginTop: 2 }}>
-                {dFees.length} students · filter by status below
+                {dFees.length} fees · filter by status below
               </div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -244,9 +909,7 @@ function DeptModal({ dept, fees, onClose, onEdit }) {
                 <button
                   onClick={() => downloadCSV(dlFees, `${(dept.filter || "all").replace(/\s+/g, "-").toLowerCase()}-${mf}-fees.csv`)}
                   style={{ padding: "7px 14px", borderRadius: 9, border: "1px solid #dbe3ff",
-                    background: "#eef2ff", fontSize: 12, fontWeight: 500, cursor: "pointer",
-                    color: BRAND, display: "flex", alignItems: "center", gap: 5 }}
-                >
+                    background: "#eef2ff", fontSize: 12, fontWeight: 500, cursor: "pointer", color: BRAND }}>
                   ⬇ {dlLabel}
                 </button>
               )}
@@ -258,8 +921,7 @@ function DeptModal({ dept, fees, onClose, onEdit }) {
               <button key={p.key} onClick={() => setMf(p.key)}
                 style={{ padding: "6px 14px", borderRadius: 999, fontSize: 12.5, fontWeight: 500,
                   cursor: "pointer", background: p.bg, color: p.color,
-                  border: `1.5px solid ${mf === p.key ? p.border : "transparent"}`, transition: ".15s" }}
-              >
+                  border: `1.5px solid ${mf === p.key ? p.border : "transparent"}` }}>
                 {p.label}
               </button>
             ))}
@@ -273,21 +935,22 @@ function DeptModal({ dept, fees, onClose, onEdit }) {
   );
 }
 
-// ================= GENERATE FEES FORM (bulk by course + year) =================
-function GenerateFeeForm({ courses, onClose, onGenerate }) {
+// ================= RAISE FEES =================
+function GenerateFeeForm({ courses, onClose, onGenerate, busy }) {
   const [form, setForm] = useState({
     course: "", year: "", fee_type: "", amount: "", due_date: "",
   });
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
-  const ready = form.course && form.year && form.fee_type && form.amount;
+  const ready =
+    form.course && form.year && form.fee_type && form.amount && form.due_date;
 
   return (
     <div style={overlayStyle} onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div style={modalStyle}>
         <div style={modalHeadStyle}>
           <div>
-            <div style={{ fontSize: 16, fontWeight: 600, color: INK }}>Add fees</div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: INK }}>Raise a fee</div>
             <div style={{ fontSize: 12.5, color: MUTED, marginTop: 2 }}>
               Applied to every student in the chosen course &amp; year
             </div>
@@ -297,53 +960,57 @@ function GenerateFeeForm({ courses, onClose, onGenerate }) {
 
         <div style={{ padding: 20 }}>
           <div style={{ marginBottom: 14 }}>
-            <label style={labelStyle}>Course</label>
+            <label style={labelStyle}>Course{req}</label>
             <select style={inputStyle} value={form.course} onChange={(e) => set("course", e.target.value)}>
               <option value="">— Select course —</option>
-              {courses.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
+              {courses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
             <div>
-              <label style={labelStyle}>Year</label>
+              <label style={labelStyle}>Year{req}</label>
               <select style={inputStyle} value={form.year} onChange={(e) => set("year", e.target.value)}>
                 <option value="">— Year —</option>
                 {YEARS.map((y) => <option key={y} value={y}>Year {y}</option>)}
               </select>
             </div>
             <div>
-              <label style={labelStyle}>Fee type</label>
-              <select style={inputStyle} value={form.fee_type} onChange={(e) => set("fee_type", e.target.value)}>
-                <option value="">— Type —</option>
-                {FEE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
+              <label style={labelStyle}>Fee type{req}</label>
+              <input style={inputStyle} list="fee-type-list"
+                placeholder="e.g. Semester Exam Fee - Sem 3"
+                value={form.fee_type} onChange={(e) => set("fee_type", e.target.value)} />
+              <datalist id="fee-type-list">
+                {FEE_TYPE_SUGGESTIONS.map((t) => <option key={t} value={t} />)}
+              </datalist>
             </div>
           </div>
 
-          <div style={{ marginBottom: 14 }}>
-            <label style={labelStyle}>Amount (₹)</label>
-            <input style={inputStyle} type="number" placeholder="e.g. 25000"
-              value={form.amount} onChange={(e) => set("amount", e.target.value)} />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div>
+              <label style={labelStyle}>Amount (₹){req}</label>
+              <input style={inputStyle} type="number" placeholder="e.g. 25000"
+                value={form.amount} onChange={(e) => set("amount", e.target.value)} />
+            </div>
+            <div>
+              <label style={labelStyle}>Due date{req}</label>
+              <input style={inputStyle} type="date" value={form.due_date}
+                onChange={(e) => set("due_date", e.target.value)} />
+            </div>
           </div>
 
-          <div style={{ marginBottom: 4 }}>
-            <label style={labelStyle}>Due date</label>
-            <input style={inputStyle} type="date" value={form.due_date}
-              onChange={(e) => set("due_date", e.target.value)} />
+          <div style={{ fontSize: 12, color: MUTED, marginTop: 14 }}>
+            A student who already has a fee with this exact name is skipped, so
+            running it twice creates no duplicates. Give each term its own name,
+            such as “Semester Exam Fee - Sem 3”.
           </div>
         </div>
 
         <div style={{ padding: "0 20px 20px", display: "flex", gap: 10, justifyContent: "flex-end" }}>
           <button onClick={onClose} style={cancelBtn}>Cancel</button>
-          <button
-            disabled={!ready}
-            onClick={() => onGenerate(form)}
-            style={primaryBtn(ready)}
-          >
-            Generate fees
+          <button disabled={!ready || busy} onClick={() => onGenerate(form)}
+            style={primaryBtn(ready && !busy)}>
+            {busy ? "Raising…" : "Raise fees"}
           </button>
         </div>
       </div>
@@ -352,16 +1019,16 @@ function GenerateFeeForm({ courses, onClose, onGenerate }) {
 }
 
 // ================= EDIT ONE FEE =================
-function FeeForm({ fee, onClose, onSave }) {
+function FeeForm({ fee, onClose, onSave, busy }) {
   const [form, setForm] = useState({
-    term:          fee?.term || "",
-    amount:        fee?.amount || "",
-    due_date:      fee?.due_date || "",
-    extended_date: fee?.extended_date || "",
-    status:        fee?.status || "pending",
-    paid_date:     fee?.paid_date || "",
+    term: fee?.term || "", amount: fee?.amount || "", due_date: fee?.due_date || "",
   });
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const status = getStatus(fee);
+  const ready = form.term && form.amount && form.due_date;
+  const paid = Number(fee?.paid_amount || 0);
+  const belowPaid = Number(form.amount || 0) < paid;
 
   return (
     <div style={overlayStyle} onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -372,7 +1039,6 @@ function FeeForm({ fee, onClose, onSave }) {
         </div>
 
         <div style={{ padding: 20 }}>
-          {/* student is fixed on an existing fee — show read-only */}
           <div style={{ marginBottom: 14 }}>
             <label style={labelStyle}>Student</label>
             <div style={{ ...inputStyle, background: "#f8fafc", color: "#475569" }}>
@@ -381,54 +1047,60 @@ function FeeForm({ fee, onClose, onSave }) {
           </div>
 
           <div style={{ marginBottom: 14 }}>
-            <label style={labelStyle}>Fee type</label>
-            <select style={inputStyle} value={form.term} onChange={(e) => set("term", e.target.value)}>
-              <option value="">— Select —</option>
-              {FEE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
-          </div>
-
-          <div style={{ marginBottom: 14 }}>
-            <label style={labelStyle}>Amount (₹)</label>
-            <input style={inputStyle} type="number" value={form.amount}
-              onChange={(e) => set("amount", e.target.value)} />
+            <label style={labelStyle}>Fee type{req}</label>
+            <input style={inputStyle} list="fee-type-list-edit" value={form.term}
+              onChange={(e) => set("term", e.target.value)} />
+            <datalist id="fee-type-list-edit">
+              {FEE_TYPE_SUGGESTIONS.map((t) => <option key={t} value={t} />)}
+            </datalist>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
             <div>
-              <label style={labelStyle}>Due date</label>
+              <label style={labelStyle}>Amount (₹){req}</label>
+              <input style={{ ...inputStyle, borderColor: belowPaid ? "#fca5a5" : "#e2e8f0" }}
+                type="number" value={form.amount}
+                onChange={(e) => set("amount", e.target.value)} />
+              {belowPaid && (
+                <div style={{ fontSize: 12, color: "#b91c1c", marginTop: 5 }}>
+                  Less than the {money(paid)} already received.
+                </div>
+              )}
+            </div>
+            <div>
+              <label style={labelStyle}>Due date{req}</label>
               <input style={inputStyle} type="date" value={form.due_date}
                 onChange={(e) => set("due_date", e.target.value)} />
             </div>
-            <div>
-              <label style={labelStyle}>Extended date <span style={{ color: "#94a3b8", fontWeight: 400 }}>(optional)</span></label>
-              <input style={inputStyle} type="date" value={form.extended_date}
-                onChange={(e) => set("extended_date", e.target.value)} />
-            </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div>
-              <label style={labelStyle}>Status</label>
-              <select style={inputStyle} value={form.status} onChange={(e) => set("status", e.target.value)}>
-                <option value="pending">Pending</option>
-                <option value="paid">Paid</option>
-              </select>
-            </div>
-            {form.status === "paid" && (
-              <div>
-                <label style={labelStyle}>Paid date</label>
-                <input style={inputStyle} type="date" value={form.paid_date}
-                  onChange={(e) => set("paid_date", e.target.value)} />
+          {/* Status is derived from the payment rows on the server. It used to be
+              an editable dropdown, so an admin could set "paid" with no payment
+              behind it — and the next payment would overwrite it. */}
+          <div style={{
+            background: "#f8fafc", borderRadius: 10, padding: 14,
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+          }}>
+            <div style={{ fontSize: 12.5, color: MUTED }}>
+              Status follows the payments recorded
+              <div style={{ fontSize: 12, marginTop: 3 }}>
+                {money(fee?.paid_amount)} of {money(fee?.amount)} received
               </div>
-            )}
+            </div>
+            <span style={{
+              padding: "4px 12px", borderRadius: 999, fontSize: 12, fontWeight: 500,
+              background: SM[status].bg, color: SM[status].color,
+            }}>
+              {SM[status].label}
+            </span>
           </div>
         </div>
 
         <div style={{ padding: "0 20px 20px", display: "flex", gap: 10, justifyContent: "flex-end" }}>
           <button onClick={onClose} style={cancelBtn}>Cancel</button>
-          <button onClick={() => onSave(form, fee.id)} style={primaryBtn(true)}>
-            Update fee
+          <button disabled={!ready || belowPaid || busy} onClick={() => onSave(form, fee.id)}
+            style={primaryBtn(ready && !belowPaid && !busy)}>
+            {busy ? "Saving…" : "Update fee"}
           </button>
         </div>
       </div>
@@ -438,25 +1110,30 @@ function FeeForm({ fee, onClose, onSave }) {
 
 // ================= MAIN =================
 export default function AdminFees() {
+  const [tab, setTab] = useState("collect");
+
   const [fees,    setFees]    = useState([]);
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [busy,    setBusy]    = useState(false);
   const [toast,   setToast]   = useState(null);
 
+  // collect tab
+  const [ledger,     setLedger]     = useState(null);
+  const [collecting, setCollecting] = useState(null);
+  const [done,       setDone]       = useState(null);
+
+  // all-fees tab
   const [statusFilter, setStatusFilter] = useState("all");
   const [termFilter,   setTermFilter]   = useState("all");
   const [search,       setSearch]       = useState("");
-
   const [activeDept,   setActiveDept]   = useState(null);
-  const [showGenerate, setShowGenerate] = useState(false);
   const [editingFee,   setEditingFee]   = useState(null);
 
-  const [open, setOpen] = useState(false);   // sidebar (mobile)
+  const [showGenerate, setShowGenerate] = useState(false);
+  const [open, setOpen] = useState(false);
 
-  useEffect(() => {
-    fetchFees();
-    fetchCourses();
-  }, []);
+  useEffect(() => { fetchFees(); fetchCourses(); }, []);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -470,7 +1147,7 @@ export default function AdminFees() {
       const data = res.data?.results || res.data;
       setFees(Array.isArray(data) ? data : []);
     } catch {
-      showToast("❌ Failed to load fees");
+      showToast("Could not load fees");
     } finally {
       setLoading(false);
     }
@@ -484,82 +1161,136 @@ export default function AdminFees() {
     } catch { /* silent */ }
   };
 
-  // ================= BULK GENERATE =================
-  const handleGenerate = async (form) => {
+  // ---------- collect ----------
+  const openLedger = async (studentId) => {
+    setBusy(true);
     try {
-      const res = await API.post("generate-fees/", {
-        course:   form.course,
-        year:     form.year,
-        fee_type: form.fee_type,
-        amount:   form.amount,
-        due_date: form.due_date || null,
+      const res = await API.get(`fee-ledger/?student=${studentId}`);
+      setLedger(res.data);
+    } catch (err) {
+      showToast(err.response?.data?.detail || "Could not open that student");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const reloadLedger = async () => {
+    if (ledger?.student?.id) {
+      try {
+        const res = await API.get(`fee-ledger/?student=${ledger.student.id}`);
+        setLedger(res.data);
+      } catch { /* the toast from the action already said enough */ }
+    }
+  };
+
+  const handleCollect = async (fee, form) => {
+    setBusy(true);
+    try {
+      const res = await API.post(`fees/${fee.id}/pay/`, {
+        amount:    form.amount,
+        mode:      form.mode,
+        reference: form.reference,
+        remarks:   form.remarks,
       });
-      showToast("✅ " + (res.data?.message || "Fees generated"));
-      setShowGenerate(false);
+      // the response is the refreshed fee. Its payments are newest-first, so
+      // the first one is the payment just taken, carrying the receipt number
+      // the server issued.
+      const updated = res.data;
+      const newest = (updated.payments || [])[0];
+
+      setCollecting(null);
+      setDone({
+        student: ledger.student,
+        fee: updated,
+        payment: newest || {
+          amount: form.amount,
+          mode: form.mode,
+          mode_label: PAY_MODES.find((m) => m.value === form.mode)?.label,
+          receipt_no: "",
+          paid_on: new Date().toISOString().slice(0, 10),
+        },
+      });
+      await reloadLedger();
       fetchFees();
     } catch (err) {
-      showToast("❌ " + (err.response?.data?.detail || "Failed to generate fees"));
+      showToast(err.response?.data?.detail || "Could not record that payment");
+    } finally {
+      setBusy(false);
     }
   };
 
-  // ================= EDIT ONE =================
-  const handleSave = async (form, editId) => {
+  // ---------- admin ----------
+  const handleGenerate = async (form) => {
+    setBusy(true);
     try {
-      const payload = {
-        term:          form.term,
-        amount:        form.amount,
-        due_date:      form.due_date      || null,
-        extended_date: form.extended_date || null,
-        status:        form.status,
-        paid_date:     form.status === "paid" ? (form.paid_date || null) : null,
-      };
-      await API.patch(`fees/${editId}/`, payload);
-      showToast("✅ Fee updated");
+      const res = await API.post("generate-fees/", {
+        course: form.course, year: form.year, fee_type: form.fee_type,
+        amount: form.amount, due_date: form.due_date,
+      });
+      showToast(res.data?.message || "Fees raised");
+      setShowGenerate(false);
+      fetchFees();
+      reloadLedger();
+    } catch (err) {
+      showToast(err.response?.data?.detail || "Could not raise fees");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSave = async (form, editId) => {
+    setBusy(true);
+    try {
+      await API.patch(`fees/${editId}/`, {
+        term: form.term, amount: form.amount, due_date: form.due_date,
+      });
+      showToast("Fee updated");
       setEditingFee(null);
       fetchFees();
-    } catch {
-      showToast("❌ Failed to save fee");
+      reloadLedger();
+    } catch (err) {
+      showToast(err.response?.data?.detail || "Could not save");
+    } finally {
+      setBusy(false);
     }
   };
 
-  const handleEdit = (fee) => {
-    setEditingFee(fee);
-    setActiveDept(null);
-  };
+  const handleEdit = (fee) => { setEditingFee(fee); setActiveDept(null); };
 
-  // ================= COMPUTED =================
+  // ---------- computed ----------
   const enriched = useMemo(() =>
     fees.map((f) => ({
       ...f,
-      department:   f.department || f.student_department || "Unknown",
+      department:   f.department || "Unknown",
       student_name: f.student_name || "Student",
-    })), [fees]
-  );
+    })), [fees]);
 
-  const deptNames = useMemo(() => {
-    const names = [...new Set(enriched.map((f) => f.department).filter(Boolean))];
-    return names.sort();
-  }, [enriched]);
+  const deptNames = useMemo(
+    () => [...new Set(enriched.map((f) => f.department).filter(Boolean))].sort(),
+    [enriched]);
 
   const depts = useMemo(() => [
     { name: "All departments", filter: null },
     ...deptNames.map((n) => ({ name: n, filter: n })),
   ], [deptNames]);
 
-  const terms = useMemo(() => {
-    const t = [...new Set(fees.map((f) => f.term).filter(Boolean))];
-    return t.sort();
-  }, [fees]);
+  const terms = useMemo(
+    () => [...new Set(fees.map((f) => f.term).filter(Boolean))].sort(), [fees]);
 
+  // Collected is money actually received. It used to count only fully paid fees
+  // at face value, so a part payment showed as nothing collected.
   const stats = useMemo(() => {
-    const total   = fees.reduce((s, f) => s + Number(f.amount || 0), 0);
-    const paid    = fees.filter((f) => f.status === "paid").reduce((s, f) => s + Number(f.amount || 0), 0);
-    const pending = fees.filter((f) => getStatus(f) === "pending").reduce((s, f) => s + Number(f.amount || 0), 0);
-    const overdue = fees.filter((f) => getStatus(f) === "overdue").reduce((s, f) => s + Number(f.amount || 0), 0);
+    const total     = fees.reduce((s, f) => s + Number(f.amount || 0), 0);
+    const collected = fees.reduce((s, f) => s + Number(f.paid_amount || 0), 0);
+    const pending   = fees.filter((f) => getStatus(f) === "pending").reduce((s, f) => s + owed(f), 0);
+    const partial   = fees.filter((f) => getStatus(f) === "partial").reduce((s, f) => s + owed(f), 0);
+    const overdue   = fees.filter((f) => getStatus(f) === "overdue").reduce((s, f) => s + owed(f), 0);
     return {
-      total, paid, pending, overdue,
+      total, collected, pending, partial, overdue,
+      outstanding: total - collected,
       paidCnt:    fees.filter((f) => f.status === "paid").length,
       pendingCnt: fees.filter((f) => getStatus(f) === "pending").length,
+      partialCnt: fees.filter((f) => getStatus(f) === "partial").length,
       overdueCnt: fees.filter((f) => getStatus(f) === "overdue").length,
     };
   }, [fees]);
@@ -570,10 +1301,14 @@ export default function AdminFees() {
       if (termFilter   !== "all" && f.term !== termFilter)         return false;
       if (search && !(f.student_name || "").toLowerCase().includes(search.toLowerCase())) return false;
       return true;
-    }), [enriched, statusFilter, termFilter, search]
-  );
+    }), [enriched, statusFilter, termFilter, search]);
 
-  // ================= RENDER =================
+  const TABS = [
+    { key: "collect", label: "Collect" },
+    { key: "all", label: "All fees" },
+    { key: "overview", label: "Overview" },
+  ];
+
   return (
     <div className="app">
       <Navbar setOpen={setOpen} />
@@ -583,135 +1318,202 @@ export default function AdminFees() {
           <div className="content">
 
             {/* ── HEADER ── */}
-            <div className="header-box" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
+            <div className="header-box" style={{
+              display: "flex", justifyContent: "space-between",
+              alignItems: "flex-start", gap: 16, flexWrap: "wrap",
+            }}>
               <div>
-                <h2>Fee Management</h2>
-                <p>Track and manage all student payments</p>
+                <h2>Fees</h2>
+                <p>Take payments at the counter, and see where the money stands</p>
               </div>
               <button className="btn-primary" onClick={() => setShowGenerate(true)}>
-                + Add fees
+                + Raise a fee
               </button>
             </div>
 
-            {/* ── SUMMARY CARDS ── */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14 }}>
-              {[
-                { key: "all",     label: "Total fees", val: money(stats.total),   sub: `${fees.length} fees`,          color: INK,       accent: BRAND },
-                { key: "paid",    label: "Collected",  val: money(stats.paid),    sub: `${stats.paidCnt} paid`,        color: "#15803d", accent: "#15803d" },
-                { key: "pending", label: "Pending",    val: money(stats.pending), sub: `${stats.pendingCnt} students`, color: "#b45309", accent: "#f59e0b" },
-                { key: "overdue", label: "Overdue",    val: money(stats.overdue), sub: `${stats.overdueCnt} students`, color: "#dc2626", accent: "#dc2626" },
-              ].map((c) => (
-                <div key={c.key}
-                  onClick={() => setStatusFilter(statusFilter === c.key ? "all" : c.key)}
-                  style={{ background: "#fff", borderRadius: 14, padding: "18px 18px 16px",
-                    border: `1px solid ${LINE}`, cursor: "pointer", transition: ".15s",
-                    boxShadow: "0 1px 3px rgba(16,24,40,.04)",
-                    borderBottom: `3px solid ${statusFilter === c.key ? c.accent : LINE}` }}
+            {/* ── TABS ── */}
+            <div style={{ display: "flex", gap: 6, borderBottom: `1px solid ${LINE}` }}>
+              {TABS.map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => setTab(t.key)}
+                  style={{
+                    padding: "10px 18px", border: "none", background: "none",
+                    cursor: "pointer", fontSize: 14,
+                    fontWeight: tab === t.key ? 600 : 500,
+                    color: tab === t.key ? BRAND : MUTED,
+                    borderBottom: `2px solid ${tab === t.key ? BRAND : "transparent"}`,
+                    marginBottom: -1,
+                  }}
                 >
-                  <div style={{ fontSize: 12, fontWeight: 500, letterSpacing: 0, textTransform: "none", color: MUTED, marginBottom: 6 }}>{c.label}</div>
-                  <div style={{ fontSize: 26, fontWeight: 600, color: c.color, letterSpacing: "-0.01em" }}>{c.val}</div>
-                  <div style={{ fontSize: 12.5, marginTop: 6, fontWeight: 500, color: "#98a2b3" }}>{c.sub}</div>
-                </div>
+                  {t.label}
+                </button>
               ))}
             </div>
 
-            {/* ── DEPARTMENT CARDS ── */}
-            <div style={{ fontSize: 15, fontWeight: 600, color: INK, marginBottom: -4 }}>
-              Departments <span style={{ fontWeight: 400, color: MUTED, fontSize: 13 }}>— click a card to view students</span>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14 }}>
-              {depts.map((d, i) => {
-                const dFees = d.filter ? enriched.filter((f) => f.department === d.filter) : enriched;
-                const total = dFees.reduce((s, f) => s + Number(f.amount || 0), 0);
-                const paid  = dFees.filter((f) => f.status === "paid").reduce((s, f) => s + Number(f.amount || 0), 0);
-                const pct   = total > 0 ? Math.round((paid / total) * 100) : 0;
-                const c = {
-                  overdue: dFees.filter((f) => getStatus(f) === "overdue").length,
-                  pending: dFees.filter((f) => getStatus(f) === "pending").length,
-                  paid:    dFees.filter((f) => f.status === "paid").length,
-                };
-                const accent = DEPT_COLORS[i % DEPT_COLORS.length];
-                return (
-                  <div key={d.name}
-                    onClick={() => setActiveDept(d)}
-                    onMouseEnter={(e) => (e.currentTarget.style.transform = "translateY(-3px)")}
-                    onMouseLeave={(e) => (e.currentTarget.style.transform = "none")}
-                    style={{ background: "#fff", borderRadius: 14, border: `1px solid ${LINE}`,
-                      borderTop: `3px solid ${accent}`, padding: 16, cursor: "pointer", transition: ".2s",
-                      boxShadow: "0 1px 3px rgba(16,24,40,.04)" }}
-                  >
-                    <div style={{ fontSize: 13.5, fontWeight: 600, color: INK, marginBottom: 10 }}>{d.name}</div>
-                    <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
-                      {c.overdue > 0 && <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 500, background: "#fef2f2", color: "#b91c1c" }}>{c.overdue} overdue</span>}
-                      {c.pending > 0 && <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 500, background: "#fff7ed", color: "#b45309" }}>{c.pending} pending</span>}
-                      {c.paid    > 0 && <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 500, background: "#ecfdf3", color: "#15803d" }}>{c.paid} paid</span>}
-                    </div>
-                    <div style={{ fontSize: 12, color: MUTED, marginBottom: 6 }}>
-                      Total: {money(total)} · {pct}% collected
-                    </div>
-                    <div style={{ height: 5, borderRadius: 999, background: "#eef0f4" }}>
-                      <div style={{ height: 5, borderRadius: 999, background: accent, width: `${pct}%` }} />
-                    </div>
-                    <div style={{ fontSize: 11, color: "#98a2b3", marginTop: 8 }}>↗ Click to view students</div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* ── STUDENT LIST ── */}
-            <div style={{ background: "#fff", borderRadius: 14, border: `1px solid ${LINE}`, overflow: "hidden", boxShadow: "0 1px 3px rgba(16,24,40,.04)" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
-                padding: "14px 18px", borderBottom: `1px solid ${HAIR}`, flexWrap: "wrap", gap: 8 }}>
-                <div style={{ fontSize: 15, fontWeight: 600, color: INK }}>
-                  All students — fee status
-                  {loading && <span style={{ fontSize: 12, color: "#94a3b8", marginLeft: 8, fontWeight: 400 }}>Loading…</span>}
-                </div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <select value={termFilter} onChange={(e) => setTermFilter(e.target.value)}
-                    style={{ padding: "8px 12px", borderRadius: 9, border: "1px solid #e2e8f0", fontSize: 13, color: "#374151", background: "#fff" }}
-                  >
-                    <option value="all">All fee types</option>
-                    {terms.map((t) => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                  <input placeholder="Search student…" value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    style={{ padding: "8px 12px", borderRadius: 9, border: "1px solid #e2e8f0", fontSize: 13, color: "#374151", background: "#fff", width: 160 }}
+            {/* ================= COLLECT ================= */}
+            {tab === "collect" && (
+              ledger
+                ? <Ledger
+                    ledger={ledger}
+                    busy={busy}
+                    onBack={() => setLedger(null)}
+                    onCollect={(fee) => setCollecting(fee)}
                   />
-                </div>
-              </div>
-              <GroupedList fees={filtered} onEdit={handleEdit} />
-            </div>
+                : <StudentSearch onPick={openLedger} busy={busy} />
+            )}
 
-            {/* ── DEPT MODAL ── */}
+            {/* ================= ALL FEES ================= */}
+            {tab === "all" && (
+              <div style={{ ...cardStyle, overflow: "hidden" }}>
+                <div style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                  padding: "14px 18px", borderBottom: `1px solid ${HAIR}`,
+                  flexWrap: "wrap", gap: 8,
+                }}>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: INK }}>
+                    Every fee raised
+                    {loading && (
+                      <span style={{ fontSize: 12, color: "#94a3b8", marginLeft: 8, fontWeight: 400 }}>
+                        Loading…
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
+                      style={{ padding: "8px 12px", borderRadius: 9, border: "1px solid #e2e8f0", fontSize: 13, background: "#fff" }}>
+                      <option value="all">Any status</option>
+                      <option value="overdue">Overdue</option>
+                      <option value="partial">Part paid</option>
+                      <option value="pending">Pending</option>
+                      <option value="paid">Paid</option>
+                    </select>
+                    <select value={termFilter} onChange={(e) => setTermFilter(e.target.value)}
+                      style={{ padding: "8px 12px", borderRadius: 9, border: "1px solid #e2e8f0", fontSize: 13, background: "#fff" }}>
+                      <option value="all">All fee types</option>
+                      {terms.map((t) => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                    <input placeholder="Search student…" value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      style={{ padding: "8px 12px", borderRadius: 9, border: "1px solid #e2e8f0", fontSize: 13, width: 170 }} />
+                    <button style={{ ...cancelBtn, padding: "8px 14px", fontSize: 13 }}
+                      onClick={() => downloadCSV(filtered, "fees.csv")}>
+                      ⬇ CSV
+                    </button>
+                  </div>
+                </div>
+                <GroupedList fees={filtered} onEdit={handleEdit} />
+              </div>
+            )}
+
+            {/* ================= OVERVIEW ================= */}
+            {tab === "overview" && (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 14 }}>
+                  {[
+                    { key: "all",     label: "Billed",      val: money(stats.total),     sub: `${fees.length} fees`,              color: INK,       accent: BRAND },
+                    { key: "paid",    label: "Collected",   val: money(stats.collected), sub: `${stats.paidCnt} fully paid`,      color: "#15803d", accent: "#15803d" },
+                    { key: "partial", label: "Part paid",   val: money(stats.partial),   sub: `${stats.partialCnt} owe a balance`, color: "#1d4ed8", accent: "#3b82f6" },
+                    { key: "pending", label: "Not started", val: money(stats.pending),   sub: `${stats.pendingCnt} students`,     color: "#b45309", accent: "#f59e0b" },
+                    { key: "overdue", label: "Overdue",     val: money(stats.overdue),   sub: `${stats.overdueCnt} students`,     color: "#dc2626", accent: "#dc2626" },
+                  ].map((c) => (
+                    <div key={c.key}
+                      onClick={() => { setStatusFilter(c.key === "all" ? "all" : c.key); setTab("all"); }}
+                      style={{ ...cardStyle, padding: "18px 18px 16px", cursor: "pointer",
+                        borderBottom: `3px solid ${c.accent}` }}>
+                      <div style={{ fontSize: 12, fontWeight: 500, color: MUTED, marginBottom: 6 }}>{c.label}</div>
+                      <div style={{ fontSize: 24, fontWeight: 600, color: c.color }}>{c.val}</div>
+                      <div style={{ fontSize: 12.5, marginTop: 6, fontWeight: 500, color: "#98a2b3" }}>{c.sub}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ fontSize: 12.5, color: MUTED, marginTop: -4 }}>
+                  Collected is money actually received. The other three are what is
+                  still owed — {money(stats.outstanding)} outstanding in total.
+                </div>
+
+                <div style={{ fontSize: 15, fontWeight: 600, color: INK, marginBottom: -4 }}>
+                  By department{" "}
+                  <span style={{ fontWeight: 400, color: MUTED, fontSize: 13 }}>
+                    — click a card to see the students
+                  </span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
+                  {depts.map((d, i) => {
+                    const dFees = d.filter ? enriched.filter((f) => f.department === d.filter) : enriched;
+                    const total = dFees.reduce((s, f) => s + Number(f.amount || 0), 0);
+                    const paid  = dFees.reduce((s, f) => s + Number(f.paid_amount || 0), 0);
+                    const pct   = total > 0 ? Math.round((paid / total) * 100) : 0;
+                    const c = {
+                      overdue: dFees.filter((f) => getStatus(f) === "overdue").length,
+                      partial: dFees.filter((f) => getStatus(f) === "partial").length,
+                      pending: dFees.filter((f) => getStatus(f) === "pending").length,
+                      paid:    dFees.filter((f) => f.status === "paid").length,
+                    };
+                    const accent = DEPT_COLORS[i % DEPT_COLORS.length];
+                    return (
+                      <div key={d.name} onClick={() => setActiveDept(d)}
+                        style={{ ...cardStyle, borderTop: `3px solid ${accent}`, padding: 16, cursor: "pointer" }}>
+                        <div style={{ fontSize: 13.5, fontWeight: 600, color: INK, marginBottom: 10 }}>{d.name}</div>
+                        <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
+                          {c.overdue > 0 && <span style={{ padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 500, background: "#fef2f2", color: "#b91c1c" }}>{c.overdue} overdue</span>}
+                          {c.partial > 0 && <span style={{ padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 500, background: "#eff6ff", color: "#1d4ed8" }}>{c.partial} part paid</span>}
+                          {c.pending > 0 && <span style={{ padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 500, background: "#fff7ed", color: "#b45309" }}>{c.pending} pending</span>}
+                          {c.paid    > 0 && <span style={{ padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 500, background: "#ecfdf3", color: "#15803d" }}>{c.paid} paid</span>}
+                        </div>
+                        <div style={{ fontSize: 12, color: MUTED, marginBottom: 6 }}>
+                          {money(paid)} of {money(total)} · {pct}% collected
+                        </div>
+                        <div style={{ height: 5, borderRadius: 999, background: "#eef0f4" }}>
+                          <div style={{ height: 5, borderRadius: 999, background: accent, width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+
+            {/* ── MODALS ── */}
+            {collecting && ledger && (
+              <CollectModal fee={collecting} student={ledger.student} busy={busy}
+                onClose={() => setCollecting(null)} onDone={handleCollect} />
+            )}
+
+            {done && (
+              <DoneModal student={done.student} payment={done.payment} fee={done.fee}
+                onClose={() => setDone(null)} />
+            )}
+
             {activeDept && (
               <DeptModal dept={activeDept} fees={enriched}
                 onClose={() => setActiveDept(null)} onEdit={handleEdit} />
             )}
 
-            {/* ── GENERATE FORM ── */}
             {showGenerate && (
-              <GenerateFeeForm courses={courses}
+              <GenerateFeeForm courses={courses} busy={busy}
                 onClose={() => setShowGenerate(false)} onGenerate={handleGenerate} />
             )}
 
-            {/* ── EDIT FORM ── */}
             {editingFee && (
-              <FeeForm fee={editingFee}
+              <FeeForm fee={editingFee} busy={busy}
                 onClose={() => setEditingFee(null)} onSave={handleSave} />
             )}
 
-            {/* ── TOAST ── */}
             {toast && (
-              <div style={{ position: "fixed", bottom: 24, right: 24, background: INK, color: "#fff",
-                padding: "12px 20px", borderRadius: 12, fontSize: 13.5, zIndex: 9999, fontWeight: 500,
-                boxShadow: "0 8px 25px rgba(0,0,0,.2)" }}>
+              <div style={{
+                position: "fixed", bottom: 24, right: 24, background: INK, color: "#fff",
+                padding: "12px 20px", borderRadius: 12, fontSize: 13.5, zIndex: 9999,
+                fontWeight: 500, boxShadow: "0 8px 25px rgba(0,0,0,.2)",
+              }}>
                 {toast}
               </div>
             )}
 
-          </div>{/* content */}
-        </div>{/* main */}
-      </div>{/* layout */}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import Navbar from "../../components/Navbar";
 import Sidebar from "../../components/Sidebar";
 import API from "../../api";
+import { payFeeOnline } from "../../utils/razorpay";
 import "../../styles/ParentModule.css";
 
 export default function ParentFees() {
@@ -82,11 +83,20 @@ export default function ParentFees() {
     setPayError("");
   };
 
-  const submitPay = async () => {
+  // Shared validation. Both buttons enforce the same rule, and the server
+  // enforces it again from the payment rows - the browser's answer is a
+  // convenience, never the authority.
+  const validAmount = () => {
     const amt = Number(payAmount);
     const remaining = pendingVal(payFee);
-    if (!amt || amt <= 0) { setPayError("Enter an amount greater than 0."); return; }
-    if (amt > remaining)  { setPayError(`You can pay at most ${money(remaining)}.`); return; }
+    if (!amt || amt <= 0) { setPayError("Enter an amount greater than 0."); return null; }
+    if (amt > remaining)  { setPayError(`You can pay at most ${money(remaining)}.`); return null; }
+    return amt;
+  };
+
+  const submitPay = async () => {
+    const amt = validAmount();
+    if (amt === null) return;
     try {
       setPaying(true);
       setPayError("");
@@ -95,6 +105,28 @@ export default function ParentFees() {
       await fetchData();
     } catch (err) {
       setPayError(err.response?.data?.detail || "Payment failed. Try again.");
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  // Online payment. Nothing is recorded here - the server verifies Razorpay's
+  // signature before a payment row exists, so a closed popup or a failed card
+  // leaves the fee untouched.
+  const submitPayOnline = async () => {
+    const amt = validAmount();
+    if (amt === null) return;
+    try {
+      setPaying(true);
+      setPayError("");
+      await payFeeOnline({ feeId: payFee.id, amount: amt });
+      setPayFee(null);
+      await fetchData();
+    } catch (err) {
+      // Closing the popup is a choice, not an error - don't shout about it.
+      if (err.code !== "dismissed") {
+        setPayError(err.message || "Payment failed. Try again.");
+      }
     } finally {
       setPaying(false);
     }
@@ -250,7 +282,10 @@ export default function ParentFees() {
               <div style={{ color: "#b91c1c", fontSize: 12, marginTop: 8 }}>{payError}</div>
             )}
 
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 18 }}>
+            <div style={{
+              display: "flex", gap: 10, justifyContent: "flex-end",
+              marginTop: 18, flexWrap: "wrap",
+            }}>
               <button
                 onClick={() => setPayFee(null)}
                 disabled={paying}
@@ -261,16 +296,32 @@ export default function ParentFees() {
               >
                 Cancel
               </button>
+
+              {/* Writes a payment row without money moving - for a payment
+                  already made at the counter. */}
               <button
                 onClick={submitPay}
                 disabled={paying}
                 style={{
-                  padding: "9px 18px", borderRadius: 10, border: "none",
-                  background: "#0f172a", color: "#fff", fontSize: 13, fontWeight: 600,
+                  padding: "9px 18px", borderRadius: 10, border: "1px solid #0f172a",
+                  background: "#fff", color: "#0f172a", fontSize: 13, fontWeight: 600,
                   cursor: paying ? "default" : "pointer", opacity: paying ? 0.7 : 1,
                 }}
               >
-                {paying ? "Paying…" : "Pay Now"}
+                {paying ? "Please wait…" : "Record Payment"}
+              </button>
+
+              {/* Real money through Razorpay. */}
+              <button
+                onClick={submitPayOnline}
+                disabled={paying}
+                style={{
+                  padding: "9px 18px", borderRadius: 10, border: "none",
+                  background: "#2563eb", color: "#fff", fontSize: 13, fontWeight: 600,
+                  cursor: paying ? "default" : "pointer", opacity: paying ? 0.7 : 1,
+                }}
+              >
+                {paying ? "Please wait…" : "Pay Online"}
               </button>
             </div>
           </div>

@@ -1,15 +1,7 @@
-# backend/mentoring/utils.py
-"""
-Everything here reads your existing tables. Nothing is invented.
 
-CGPA: this project has no cgpa column. exams.SemesterResult holds published
-semesters and exams.ResultEntry holds marks_obtained / max_marks per subject.
-We average the published percentages and divide by 10 to get a 10-point value.
-That derivation is stated on screen so nobody mistakes it for a registered CGPA.
-"""
 from datetime import date
 
-from django.db.models import Q
+from django.db.models import F
 
 from users.models import Department, User
 
@@ -87,30 +79,29 @@ def band_for_cgpa(cgpa, setting):
     return "C"
 
 
-def band_for_student(student, setting):
-    """
-    Grade band used when creating an allocation. Honours the first-year rule,
-    because a first year has no published result to compute from.
-    """
-    cgpa = student_cgpa(student)
-    band = band_for_cgpa(cgpa, setting)
-    if band is None and setting.first_year_rule == "band_b":
-        return "B", None
-    return band, cgpa
-
-
 # ================= ATTENDANCE =================
 def attendance_map(students):
     """
     {student_id: percentage|None} from attendance.Attendance.
-    'duty_leave' counts as present, matching how your OD approval marks it.
+
+    Scoped to each student's CURRENT semester. Counting every record a student
+    has ever had dilutes a third year's figure with two prior years, and that
+    number drives the "below 75%" list a mentor acts on.
+
+    F("student__semester") matches each row against its own student's semester,
+    so one query handles a list spanning several. This is the same rule
+    exams._attendance_percent uses for the hall ticket, so a student is never
+    below the line on one screen and above it on another.
+
+    'duty_leave' counts as present, matching how OD approval marks it.
     """
     from attendance.models import Attendance
 
     ids = [s.id if hasattr(s, "id") else s for s in students]
-    rows = Attendance.objects.filter(student_id__in=ids).values_list(
-        "student_id", "status"
-    )
+    rows = Attendance.objects.filter(
+        student_id__in=ids,
+        teaching_assignment__subject__semester=F("student__semester"),
+    ).values_list("student_id", "status")
 
     acc = {}
     for sid, st in rows:
@@ -162,10 +153,10 @@ def department_mentors(department):
     ).order_by("first_name", "username")
 
 
-# ================= CLASS ADVISOR =================
+# ================= TUTOR =================
 def advisor_for_student(student):
     """
-    Your class advisor is courses.YearTutor — one tutor per Year of a Course.
+    Your tutor is courses.YearTutor — one tutor per Year of a Course.
     Returns the teacher, or None when that year has no tutor assigned.
     """
     from courses.models import YearTutor
@@ -179,20 +170,6 @@ def advisor_for_student(student):
         .first()
     )
     return link.teacher if link else None
-
-
-def advised_student_ids(teacher):
-    """Students whose class this teacher is the advisor (YearTutor) for."""
-    from courses.models import YearTutor
-
-    links = YearTutor.objects.filter(teacher=teacher).select_related("year")
-    if not links.exists():
-        return User.objects.none().values_list("id", flat=True)
-
-    q = Q()
-    for link in links:
-        q |= Q(course_id=link.course_id, year=link.year.year_number)
-    return User.objects.filter(q, role="student").values_list("id", flat=True)
 
 
 # ================= MENTOR LOAD AND BEST FIT =================
@@ -327,3 +304,77 @@ def group_balance(load, setting):
     if load["A"] / load["total"] < 0.15:
         return "warn", "Low on grade A"
     return "ok", "Balanced"
+
+
+# ================= TEAM-BASED ALLOCATION =================
+def resolve_advisor_class(teacher):
+    """
+    The class this teacher is the tutor for, or None.
+
+    Returns (course, year_number). Every advisor endpoint calls this and
+    refuses when it is None, so a teacher can only ever act on their own class.
+
+    .first() is safe because users.hod_assign_tutor refuses to give a teacher a
+    second class. If that rule is ever relaxed this becomes a silent bug — the
+    teacher would see one class with no sign the other exists — and these
+    endpoints would need a ?course= &year= selector instead.
+    """
+    from courses.models import YearTutor
+
+    link = (
+        YearTutor.objects
+        .filter(teacher=teacher)
+        .select_related("course", "year")
+        .first()
+    )
+    if not link:
+        return None
+    return link.course, link.year.year_number
+
+
+def class_students(course, year):
+    """Students in one class, in name order."""
+    return (
+        User.objects
+        .filter(role="student", course=course, year=year, is_active=True)
+        .select_related("course")
+        .order_by("first_name", "last_name")
+    )
+
+
+def student_in_team(student, academic_year):
+    """The student's team membership for a year, or None."""
+    from .models import MentorTeamMember
+
+    return (
+        MentorTeamMember.objects
+        .filter(student=student, team__academic_year=academic_year)
+        .select_related("team", "team__course")
+        .first()
+    )
+
+
+def mentor_rule_for(department, academic_year):
+    """The department's team rules for a year. Creates defaults on first read."""
+    from .models import MentorRule
+
+    rule, _ = MentorRule.objects.get_or_create(
+        department=department, academic_year=academic_year
+    )
+    return rule
+
+
+def teams_needed(student_count, rule):
+    """
+    How many teams a class produces. Never hard-coded — 69 students at 3 per
+    team is 23, but 74 at 3 is 25 with two teams carrying a fourth.
+    """
+    if student_count <= 0 or rule.team_size <= 0:
+        return 0
+    whole, left = divmod(student_count, rule.team_size)
+    if left == 0:
+        return whole
+    if rule.fallback == "extra_member" and whole > 0:
+        # the spare students join existing teams as extra members
+        return whole
+    return whole + 1

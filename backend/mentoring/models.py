@@ -2,6 +2,7 @@
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
+from django.utils.functional import cached_property
 
 
 # ================= GRADE BAND =================
@@ -10,6 +11,18 @@ BAND_CHOICES = (
     ("B", "Grade B"),
     ("C", "Grade C"),
 )
+
+
+def _current_academic_year():
+    """
+    June to May. Mirrors utils.current_academic_year.
+
+    Duplicated deliberately: utils imports models, so models importing utils
+    back would be a cycle. Four lines is cheaper than restructuring both.
+    """
+    today = timezone.localdate()
+    start = today.year if today.month >= 6 else today.year - 1
+    return f"{start}-{start + 1}"
 
 
 # ================= MENTORING SETTINGS (per department) =================
@@ -29,10 +42,13 @@ class MentoringSetting(models.Model):
     band_a_min = models.FloatField(default=8.0)
     band_b_min = models.FloatField(default=6.5)
 
-    # every mentor group should hold A, B and C students
-    require_all_bands = models.BooleanField(default=True)
+    # NOTE: require_all_bands used to be a column here. It said the same thing
+    # as MentorRule.grade_mix and nothing kept the two in step, so a HOD could
+    # turn the rule off in Settings and watch team formation carry on enforcing
+    # it. MentorRule is now the single source of truth and this is derived from
+    # it — see the cached_property at the bottom of this class.
 
-    # class advisor proposes, HOD approves. False = HOD allocates directly.
+    # the tutor proposes, HOD approves. False = HOD allocates directly.
     route_via_advisor = models.BooleanField(default=True)
 
     # Many colleges only start mentoring from second year, because a first year
@@ -66,6 +82,31 @@ class MentoringSetting(models.Model):
         obj, _ = cls.objects.get_or_create(department=department)
         return obj
 
+    @cached_property
+    def require_all_bands(self):
+        """
+        Does this department's mentor groups need a mix of A, B and C?
+
+        Derived from MentorRule.grade_mix for the CURRENT academic year, which
+        is the only place the policy is set. Kept under the old field name so
+        fit_score, group_balance and why_best_fit read it unchanged.
+
+        cached_property matters: fit_score runs once per mentor per student
+        inside suggest_split, and an uncached lookup would be a query each time.
+
+        A past academic year on a read-only screen sees the current year's
+        policy. The composition rule does not change year to year in practice,
+        and the alternative is threading an academic_year through five call
+        sites for a historical view nobody edits.
+        """
+        rule = MentorRule.objects.filter(
+            department_id=self.department_id,
+            academic_year=_current_academic_year(),
+        ).first()
+        # No rule row yet means nothing has been configured, and MentorRule's
+        # own default is "abc" — so the answer is the same either way.
+        return rule.grade_mix == "abc" if rule else True
+
 
 # ================= MENTOR ALLOCATION =================
 class MentorAllocation(models.Model):
@@ -78,14 +119,14 @@ class MentorAllocation(models.Model):
     """
 
     STATUS_CHOICES = (
-        ("pending", "Awaiting HOD approval"),   # proposed by a class advisor
+        ("pending", "Awaiting HOD approval"),   # proposed by a tutor
         ("active", "Active"),
         ("closed", "Closed"),                   # removed, reassigned or year rollover
-        ("rejected", "Proposal rejected"),      # HOD said no to an advisor proposal
+        ("rejected", "Proposal rejected"),      # HOD said no to a tutor proposal
     )
 
     SOURCE_CHOICES = (
-        ("advisor", "Class advisor proposal"),
+        ("advisor", "Tutor proposal"),
         ("hod", "Assigned directly by the HOD"),
         ("auto", "Auto-distributed"),
         ("request", "Change request approved"),
@@ -256,7 +297,6 @@ class MentorBroadcastRecipient(models.Model):
     def __str__(self):
         return f"{self.student} <- broadcast {self.broadcast_id}"
 
-    
 
 # ================= MENTOR CHANGE REQUEST =================
 class MentorChangeRequest(models.Model):
@@ -264,9 +304,9 @@ class MentorChangeRequest(models.Model):
     A student or a mentor asking for a different allocation.
 
     Three routes, decided by who raised it and why:
-      student, normal reason  -> class advisor -> HOD
-      student, sensitive      -> HOD only, the advisor never sees it
-      mentor                  -> HOD only, there is no advisor step
+      student, normal reason  -> tutor -> HOD
+      student, sensitive      -> HOD only, the tutor never sees it
+      mentor                  -> HOD only, there is no tutor step
 
     The current mentor is never shown the request. Nothing changes until
     the HOD approves, and approving goes through MentorAllocation so the
@@ -285,7 +325,7 @@ class MentorChangeRequest(models.Model):
         ("other",        "Other"),
     )
 
-    # these skip the class advisor entirely
+    # these skip the tutor entirely
     CONFIDENTIAL_REASONS = ("comfort", "gender")
     # only a mentor may pick these
     STAFF_ONLY_REASONS = ("capacity", "leave")
@@ -296,11 +336,11 @@ class MentorChangeRequest(models.Model):
     )
 
     STATUS_CHOICES = (
-        ("advisor",   "With the class advisor"),
+        ("advisor",   "With the tutor"),
         ("hod",       "With the HOD"),
         ("approved",  "Approved — student moved"),
         ("rejected",  "Rejected by the HOD"),
-        ("resolved",  "Resolved by the class advisor"),
+        ("resolved",  "Resolved by the tutor"),
         ("withdrawn", "Withdrawn"),
     )
     OPEN_STATUSES = ("advisor", "hod")
@@ -339,7 +379,7 @@ class MentorChangeRequest(models.Model):
 
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="hod")
 
-    # ---- class advisor step ----
+    # ---- tutor step ----
     advisor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL, null=True, blank=True,
@@ -400,9 +440,9 @@ class MentorChangeRequest(models.Model):
         Work out the first stop and fill in self.advisor. Called before the
         first save(). Sets status to 'advisor' or 'hod'.
 
-        The advisor step is dropped when the reason is sensitive, when a
-        mentor raised it, when the department turned advisor routing off,
-        when the class has no YearTutor, or when the class advisor IS the
+        The tutor step is dropped when the reason is sensitive, when a
+        mentor raised it, when the department turned tutor routing off,
+        when the class has no YearTutor, or when the tutor IS the
         mentor being complained about. Nobody reviews a complaint about
         themselves.
         """
@@ -431,3 +471,158 @@ class MentorChangeRequest(models.Model):
         # the reason decides confidentiality, always — not the caller
         self.is_confidential = self.reason in self.CONFIDENTIAL_REASONS
         super().save(*args, **kwargs)
+
+
+# ================= TEAM-BASED ALLOCATION =================
+class MentorRule(models.Model):
+    """
+    One row per department + academic year. Read by student, tutor and HOD.
+
+    grade_mix is the SINGLE source of truth for the composition rule.
+    MentoringSetting.require_all_bands reads it rather than storing its own
+    copy, so the two can no longer disagree.
+    """
+
+    GRADE_MIX = (("abc", "One A, one B, one C"), ("none", "No grade rule"))
+    FALLBACK = (
+        ("extra_member", "Allow an extra student from another band"),
+        ("leave_short", "Leave those teams one short"),
+    )
+
+    department = models.ForeignKey(
+        "users.Department", on_delete=models.CASCADE, related_name="mentor_rules"
+    )
+    academic_year = models.CharField(max_length=9)
+
+    team_size = models.PositiveSmallIntegerField(default=3)
+    grade_mix = models.CharField(max_length=5, choices=GRADE_MIX, default="abc")
+    fallback = models.CharField(max_length=14, choices=FALLBACK, default="extra_member")
+
+    skip_last_year_mentors = models.BooleanField(default=True)
+    skip_class_advisors = models.BooleanField(default=False)
+    tiebreak_fewest_mentees = models.BooleanField(default=True)
+
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = [("department", "academic_year")]
+
+    def __str__(self):
+        return f"{self.department} · {self.academic_year}"
+
+
+class MentorTeam(models.Model):
+    """A team of students in one class that shares a mentor."""
+
+    course = models.ForeignKey(
+        "courses.Course", on_delete=models.CASCADE, related_name="mentor_teams"
+    )
+    year = models.PositiveSmallIntegerField()
+    academic_year = models.CharField(max_length=9)
+    number = models.PositiveSmallIntegerField()
+
+    mentor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL, null=True, blank=True,
+        limit_choices_to={"role": "teacher"},
+        related_name="mentor_teams",
+    )
+    mentor_was_suggested = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="+",
+    )
+
+    is_closed = models.BooleanField(default=False)
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    proposed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="proposed_teams",
+    )
+
+    class Meta:
+        unique_together = [("course", "year", "academic_year", "number")]
+        ordering = ["number"]
+
+    def __str__(self):
+        return f"Team {self.number} · {self.course} Y{self.year}"
+
+
+class MentorTeamMember(models.Model):
+    """A student in a team. Join table so the fallback can add a fourth."""
+
+    team = models.ForeignKey(
+        MentorTeam, on_delete=models.CASCADE, related_name="members"
+    )
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        limit_choices_to={"role": "student"},
+        related_name="team_memberships",
+    )
+
+    # Copied from team.academic_year in save(). Denormalised deliberately: a
+    # constraint cannot reach across the FK, and "one team per student per
+    # year" is the rule that matters. Without it two simultaneous joins both
+    # pass the Python check and the student lands in two teams at once.
+    academic_year = models.CharField(max_length=9, blank=True, db_index=True)
+
+    band = models.CharField(max_length=1, blank=True)
+    is_extra = models.BooleanField(default=False)
+    joined_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        unique_together = [("team", "student")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["student", "academic_year"],
+                name="one_team_per_student_per_year",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        # Never set by a caller — always taken from the team, so the two can
+        # never disagree.
+        if self.team_id:
+            self.academic_year = self.team.academic_year
+        super().save(*args, **kwargs)
+
+
+class UnplacedStudent(models.Model):
+    """
+    A student the tutor has deliberately left out of a team.
+
+    Only needed when the department rule is 'leave_short': the fallback is off,
+    nobody can take the student, and formation still has to close. Marking is
+    explicit so nothing is silently dropped — the row records who decided and
+    why, and disappears the moment the student is placed.
+    """
+
+    course = models.ForeignKey(
+        "courses.Course", on_delete=models.CASCADE, related_name="unplaced_students"
+    )
+    year = models.PositiveSmallIntegerField()
+    academic_year = models.CharField(max_length=9)
+
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        limit_choices_to={"role": "student"},
+        related_name="unplaced_marks",
+    )
+    band = models.CharField(max_length=1, blank=True)
+    reason = models.CharField(max_length=255, blank=True)
+
+    marked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="+",
+    )
+    marked_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        unique_together = [("student", "academic_year")]
+
+    def __str__(self):
+        return f"{self.student} left unplaced ({self.academic_year})"

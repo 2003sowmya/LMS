@@ -47,7 +47,11 @@ from .views import (
 
     # FEEDBACK
     FeedbackViewSet,
-    FeeViewSet,  
+    FeeViewSet,
+
+    # ONLINE PAYMENTS
+    verify_payment,
+    razorpay_webhook,
 
     my_progress,
     class_progress,
@@ -59,7 +63,7 @@ from .views import (
     messages_with,
     chat_contacts,
     chat_with,
-
+    fee_ledger,
 )
 
 router = DefaultRouter()
@@ -116,6 +120,7 @@ urlpatterns = [
     # ================= GENERATE ENROLLMENTS =================
     path('generate-enrollments/',generate_enrollments),
     path('generate-fees/', generate_fees),
+    path('fee-ledger/', fee_ledger),
     # ================= ELECTIVES =================
     path('my-electives/', my_electives),
     path('elective-enroll/', elective_enroll),
@@ -125,7 +130,16 @@ urlpatterns = [
 
     # ================= FEES =================
     path('parent/dashboard/', parent_dashboard),
-    
+
+    # ================= ONLINE PAYMENTS =================
+    # initiate-payment is an @action on FeeViewSet, so the router registers
+    # it automatically. Only these two need a manual path.
+    path('payments/verify/', verify_payment),
+
+    # No login on the webhook - Razorpay is not a user. The webhook secret
+    # is what proves the request is genuine.
+    path('payments/webhook/razorpay/', razorpay_webhook),
+
     # =================PARENTS=========================
     path('manage/parents/', manage_parents),
     path('manage/parents/<int:profile_id>/children/', update_parent_children),

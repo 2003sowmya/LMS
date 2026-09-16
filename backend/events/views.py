@@ -6,8 +6,8 @@ from rest_framework.exceptions import ValidationError
 from django.db import models
 from django.contrib.auth import get_user_model
 
-from .models import CalendarEvent,Announcement
-from .serializers import CalendarEventSerializer,AnnouncementSerializer
+from .models import CalendarEvent, Announcement
+from .serializers import CalendarEventSerializer, AnnouncementSerializer
 
 # cross-app imports from courses
 from courses.models import Enrollment, Notification
@@ -191,8 +191,38 @@ def calendar_feed(request):
                 "description": f"Semester {sem} examinations end",
             })
 
+    # ---- group events: the audience is the group's own student query, so a
+    # ---- Civil event cannot reach a Mechanical student the way a
+    # ---- CalendarEvent row would (it filters on year_number alone)
+    from classgroups.models import ClassEvent, ClassGroup
+
+    my_group_ids = [
+        g.id for g in ClassGroup.objects.filter(is_archived=False)
+        if g.students().filter(id=user.id).exists() or g.owner() == user
+    ]
+    if my_group_ids:
+        for ev in (ClassEvent.objects
+                   .filter(message__group_id__in=my_group_ids,
+                           message__is_deleted=False,
+                           starts_at__month=int(month), starts_at__year=int(year))
+                   .select_related("message", "message__group")):
+            items.append({
+                "id": f"groupevent-{ev.message_id}",
+                "title": ev.message.title,
+                "type": "event",
+                "audience": "students",
+                "start_date": ev.starts_at.date().isoformat(),
+                "end_date": ev.ends_at.date().isoformat() if ev.ends_at else None,
+                "description": (
+                    f"{ev.message.group.display_name} · "
+                    f"{ev.starts_at:%I:%M %p}"
+                    + (f" · {ev.location}" if ev.location else "")
+                ),
+            })
+
     items.sort(key=lambda x: x["start_date"])
     return Response(items)
+
 
 # ===================== ANNOUNCEMENT =====================
 class AnnouncementViewSet(viewsets.ModelViewSet):
@@ -260,6 +290,7 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
         if self.request.user.role not in self.ADMIN_ROLES:
             raise ValidationError("You are not allowed to delete announcements.")
         instance.delete()
+
 
 # ===================== GOOGLE HOLIDAY SYNC =====================
 import json

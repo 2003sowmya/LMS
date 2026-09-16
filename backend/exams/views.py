@@ -505,6 +505,29 @@ def _fine_term(semester):
     """
     return f"{ATTENDANCE_FINE_TERM} - Sem {semester}"
 
+EXAM_FEE_TERM = "Semester Exam Fee"
+
+
+def _exam_fee_term(semester):
+    """
+    One exam fee per student per semester, keyed by the term string — the same
+    approach _fine_term uses, and for the same reason: Fee has no semester
+    column.
+    """
+    return f"{EXAM_FEE_TERM} - Sem {semester}"
+
+
+def _exam_fee_unpaid(student):
+    """
+    The fee must EXIST and be unpaid to block. If the office has not generated
+    exam fees for this semester, nobody is blocked — otherwise switching this
+    on would bar every student in the college overnight.
+    """
+    return Fee.objects.filter(
+        student=student,
+        term=_exam_fee_term(student.semester),
+    ).exclude(status="paid").exists()
+
 
 def _attendance_percent(student):
 
@@ -541,6 +564,21 @@ def _is_eligible(student):
         return True, pct, "fine_paid"
 
     return False, pct, "blocked"
+
+def _can_sit_exam(student):
+    """
+    Two independent gates. Both must pass before a hall ticket is issued:
+        1. the semester exam fee is paid (if one has been generated)
+        2. attendance >= 75%, or this semester's shortage fine is paid
+
+    Kept separate from _is_eligible because generate_attendance_fines uses that
+    one to decide who gets an ATTENDANCE fine. Folding the exam fee into it
+    would fine a student with perfect attendance for a shortage they do not have.
+    """
+    if _exam_fee_unpaid(student):
+        return False, _attendance_percent(student), "exam_fee_unpaid"
+
+    return _is_eligible(student)
 
 # ===================== SEMESTER RESULT: CSV TEMPLATE =====================
 @api_view(["GET"])
@@ -669,8 +707,7 @@ def my_hall_ticket(request):
     if user.role != "student":
         return Response({"detail": "Students only."}, status=403)
 
-    eligible, pct, reason = _is_eligible(user)
-
+    eligible, pct, reason = _can_sit_exam(user)
     # subjects = the student's enrolled subjects, with code + exam schedule
     from .models import ExamSchedule
     enrollments = Enrollment.objects.filter(student=user).select_related(
@@ -701,17 +738,26 @@ def my_hall_ticket(request):
         term=_fine_term(user.semester),
     ).exclude(status="paid").first()
 
+        # same idea for the exam fee, so the student can pay it from this screen
+    exam_fee = Fee.objects.filter(
+        student=user,
+        term=_exam_fee_term(user.semester),
+    ).exclude(status="paid").first()
+
     return Response({
         "student_name": user.username,
         "roll_number": user.roll_number,
         "attendance_percent": pct,
         "threshold": ATTENDANCE_THRESHOLD,
         "eligible": eligible,
-        "reason": reason,                       # attendance | fine_paid | blocked
+        "reason": reason,   # attendance | fine_paid | blocked | exam_fee_unpaid
         "subjects": subjects,
         "fine_id": fine.id if fine else None,   # frontend pays this fee
         "fine_amount": float(fine.amount) if fine else None,
+        "exam_fee_id": exam_fee.id if exam_fee else None,
+        "exam_fee_amount": float(exam_fee.amount) if exam_fee else None,
     })
+    
 
 
 # ===================== HALL TICKET: ADMIN ROSTER =====================
@@ -736,7 +782,7 @@ def hall_ticket_roster(request):
 
     data = []
     for s in students:
-        eligible, pct, reason = _is_eligible(s)
+        eligible, pct, reason = _can_sit_exam(s)
         has_fine = Fee.objects.filter(
             student=s, term=_fine_term(s.semester),
         ).exclude(status="paid").exists()
@@ -748,6 +794,7 @@ def hall_ticket_roster(request):
             "eligible": eligible,
             "reason": reason,
             "has_unpaid_fine": has_fine,
+            "has_unpaid_exam_fee": _exam_fee_unpaid(s),
         })
     return Response(data)
 
@@ -1400,3 +1447,65 @@ def cancel_revaluation(request, pk):
 
     revreq.delete()
     return Response({"status": "cancelled"})
+
+# ===================== EXAM FEE: ADMIN GENERATE =====================
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def generate_exam_fees(request):
+    """
+    Raise the semester exam fee for a whole class.
+
+    The term string is built by _exam_fee_term — the SAME helper
+    _exam_fee_unpaid reads when deciding whether to block a hall ticket. Typing
+    it by hand in the fee screen was one space away from a silent failure: the
+    fee would exist, look right, and block nobody.
+
+    Body: {course, year, semester, amount, due_date}
+    """
+    if not is_exam_admin(request.user):
+        return Response({"detail": "Only admin or exam admin."}, status=403)
+
+    course = request.data.get("course")
+    year = request.data.get("year")
+    semester = request.data.get("semester")
+    amount = request.data.get("amount")
+    due_date = request.data.get("due_date") or None
+
+    if not (course and year and semester and amount):
+        return Response(
+            {"detail": "course, year, semester and amount are required."},
+            status=400,
+        )
+
+    # Fee.due_date is NOT NULL. Default to 14 days out, as the fines roster does.
+    if not due_date:
+        due_date = datetime.date.today() + datetime.timedelta(days=14)
+
+    students = User.objects.filter(
+        role="student", course_id=course, year=year, semester=semester,
+    )
+
+    term = _exam_fee_term(semester)
+
+    created = 0
+    skipped = 0
+    for s in students:
+        _, was_created = Fee.objects.get_or_create(
+            student=s,
+            term=term,
+            defaults={"amount": amount, "due_date": due_date, "status": "pending"},
+        )
+        if was_created:
+            created += 1
+        else:
+            skipped += 1
+
+    return Response({
+        "message": (
+            f'{created} exam fee(s) raised as "{term}". '
+            f"{skipped} student(s) already had one — their amount was not changed."
+        ),
+        "term": term,
+        "created": created,
+        "skipped": skipped,
+    })

@@ -22,7 +22,7 @@ import "../../styles/MentorAllocation.css";
 
 const BUCKETS = [
   { key: "waiting", label: "Awaiting you" },
-  { key: "advisor", label: "With advisor" },
+  { key: "advisor", label: "With tutor" },
   { key: "decided", label: "Decided" },
 ];
 
@@ -194,14 +194,14 @@ export default function HodChangeRequests() {
 
             {r.advisor_note && (
               <div className="ma-why">
-                <b>{r.advisor_name} — class advisor</b>
+                <b>{r.advisor_name} —class tutor</b>
                 <ul><li>{r.advisor_note}</li></ul>
               </div>
             )}
 
             {r.is_confidential && (
               <div className="ma-note amber" style={{ marginTop: 14 }}>
-                <b>The class advisor was skipped</b>
+                <b>The class tutor was skipped</b>
                 This reason routes straight to you. Nobody else in the department
                 can read it, and {r.current_mentor_name} has not been told.
               </div>
@@ -318,14 +318,14 @@ export default function HodChangeRequests() {
           <div className="d">Nothing moves until you act</div>
         </div>
         <div className="ma-card">
-          <div className="l">With a class advisor</div>
+          <div className="l">With a class tutor</div>
           <div className="n">{counts.with_advisor ?? 0}</div>
           <div className="d">Not yours yet</div>
         </div>
         <div className="ma-card">
           <div className="l">Confidential</div>
           <div className="n amber">{counts.confidential ?? 0}</div>
-          <div className="d">Advisor was skipped</div>
+          <div className="d">Tutor was skipped</div>
         </div>
         <div className="ma-card">
           <div className="l">Decided this year</div>
@@ -409,7 +409,7 @@ export default function HodChangeRequests() {
             )}
             {r.advisor_note && (
               <div className="ma-why">
-                <b>{r.advisor_name} — class advisor</b>
+                <b>{r.advisor_name} —class tutor</b>
                 <ul><li>{r.advisor_note}</li></ul>
               </div>
             )}
@@ -481,3 +481,4 @@ export default function HodChangeRequests() {
     </div>
   );
 }
+

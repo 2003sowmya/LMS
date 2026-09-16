@@ -129,7 +129,7 @@ export default function HodAllocationHistory() {
                     <select value={changedBy} onChange={(e) => setChangedBy(e.target.value)}>
                       <option value="all">Anyone</option>
                       <option value="hod">HOD</option>
-                      <option value="advisor">Class advisor</option>
+                      <option value="advisor">Class tutor</option>
                       <option value="auto">Auto-distributed</option>
                     </select>
                   </div>

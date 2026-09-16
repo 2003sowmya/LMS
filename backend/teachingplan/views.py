@@ -1,5 +1,6 @@
 # backend/teachingplan/views.py
 import json
+import logging
 import re
 from django.conf import settings
 from datetime import date, datetime, timedelta
@@ -18,6 +19,13 @@ from .serializers import (
     TeachingPlanReadSerializer,
 )
 
+# Several blocks below deliberately keep working when something inside them
+# fails, because a half-built dropdown is better than a 500. That is a
+# reasonable trade only while the failure is VISIBLE: swallowing it silently
+# meant an empty response looked identical to a genuinely empty result, and
+# the frontend quietly substituted demo data for it.
+logger = logging.getLogger(__name__)
+
 
 def hod_departments(user):
     """Departments where this user is the HOD. Adjust 'hod' if your field differs."""
@@ -34,7 +42,11 @@ def notify(user, title, message):
             notification_type="announcement",
         )
     except Exception:
-        pass
+        # A failed notification must not break the approval that triggered it,
+        # but it should not vanish either.
+        logger.exception(
+            "teachingplan.notify failed for user %s", getattr(user, "id", None)
+        )
 
 
 def year_label(year):
@@ -106,7 +118,13 @@ class TeachingPlanViewSet(viewsets.ModelViewSet):
                 if cls and cls not in seen_cls:
                     seen_cls.add(cls); classes.append(cls)
         except Exception:
-            pass  # frontend falls back to its demo options if this is empty
+            # An empty response here makes the frontend fall back to DEMO
+            # options, so the teacher picks from data that is not theirs and
+            # has no way to tell. Whatever was built before the failure is
+            # still returned, but the failure itself is now on the record.
+            logger.exception(
+                "teachingplan options build failed for user %s", request.user.id
+            )
 
         return Response({
             "subjects": subjects,
@@ -176,7 +194,13 @@ class TeachingPlanViewSet(viewsets.ModelViewSet):
                     "allotted_hours": allotted,
                 })
         except Exception:
-            pass  # if anything is missing, return whatever we built (frontend hides the panel if empty)
+            # Returns a PARTIAL list - whatever was built before the failure.
+            # A subject missing from it looks to the teacher exactly like one
+            # they were never assigned, which is why this cannot stay silent.
+            logger.exception(
+                "teachingplan subject_status failed for user %s (returning %d of an "
+                "unknown total)", request.user.id, len(out)
+            )
 
         return Response({"subjects": out})
 
@@ -263,7 +287,7 @@ class TeachingPlanViewSet(viewsets.ModelViewSet):
             "periods_per_week": periods_per_week,
             "dates": dates,
         })
-    
+
     # ---------- TEACHER: ordered list of class days (for the day-by-day form) ----------
     @action(detail=False, methods=["get"])
     def class_days(self, request):
@@ -344,7 +368,6 @@ class TeachingPlanViewSet(viewsets.ModelViewSet):
                             })
                 d += timedelta(days=1)
         return Response({"allotted": allotted, "days": days})
-    
 
     # ---------- TEACHER: my assigned weekly timetable (for the View timetable popup) ----------
     @action(detail=False, methods=["get"])
@@ -440,7 +463,13 @@ class TeachingPlanViewSet(viewsets.ModelViewSet):
             course_name = assignment.year.course.name
             year_number = assignment.year.year_number
         except Exception:
-            pass
+            # Only affects the prompt's context line; the request still works
+            # with blanks. Logged at warning rather than exception because the
+            # traceback is not worth the noise for a cosmetic fallback.
+            logger.warning(
+                "teachingplan: could not read course/year for assignment %s",
+                assignment.id,
+            )
 
         api_key = getattr(settings, "GEMINI_API_KEY", "")
         if not api_key:
@@ -484,6 +513,7 @@ class TeachingPlanViewSet(viewsets.ModelViewSet):
             result = model.generate_content(prompt)
             raw = (result.text or "").strip()
         except Exception as e:
+            logger.exception("teachingplan: Gemini call failed for subject %s", subject_id)
             return Response(
                 {"detail": f"Could not reach the AI service: {e}"},
                 status=status.HTTP_502_BAD_GATEWAY,
@@ -495,12 +525,19 @@ class TeachingPlanViewSet(viewsets.ModelViewSet):
         try:
             topics = json.loads(cleaned)
         except json.JSONDecodeError:
+            logger.warning(
+                "teachingplan: Gemini returned unparseable JSON for subject %s", subject_id
+            )
             return Response(
                 {"detail": "The AI returned an unexpected format. Please try again."},
                 status=status.HTTP_502_BAD_GATEWAY,
             )
 
         if not isinstance(topics, list):
+            logger.warning(
+                "teachingplan: Gemini returned %s, not a list, for subject %s",
+                type(topics).__name__, subject_id,
+            )
             return Response(
                 {"detail": "The AI returned an unexpected format. Please try again."},
                 status=status.HTTP_502_BAD_GATEWAY,
@@ -589,7 +626,14 @@ class TeachingPlanViewSet(viewsets.ModelViewSet):
                 if lbl:
                     my_labels.add(lbl)
         except Exception:
-            pass
+            # my_labels stays empty, and the fallback below then shows EVERY
+            # approved plan in the college rather than this student's class.
+            # That is a wrong answer dressed up as a working page, so the
+            # failure has to be findable.
+            logger.exception(
+                "teachingplan: class labels failed for student %s - falling back to "
+                "all approved plans", request.user.id
+            )
 
         qs = self.get_queryset().filter(status="approved")
         # if we found the student's class labels, show only those; otherwise

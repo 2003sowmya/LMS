@@ -120,7 +120,7 @@ class AssignSerializer(serializers.Serializer):
 
 
 class ProposeSerializer(serializers.Serializer):
-    """POST body a class advisor uses to propose a group list."""
+    """POST body a tutor uses to propose a group list."""
     allocations = serializers.ListField(
         child=serializers.DictField(), allow_empty=False
     )  # [{"student_id": 1, "mentor_id": 9}, ...]
@@ -133,6 +133,16 @@ class DecideProposalSerializer(serializers.Serializer):
     )
     decision = serializers.ChoiceField(choices=["approve", "reject"])
     note = serializers.CharField(required=False, allow_blank=True)
+    # optional: approve but with a different mentor than the advisor proposed
+    mentor_id = serializers.IntegerField(required=False)
+
+    def validate(self, data):
+        # the advisor has to redo the work, so they are owed a reason
+        if data["decision"] == "reject" and not (data.get("note") or "").strip():
+            raise serializers.ValidationError(
+                {"note": "Say why you are returning it - the tutor is shown this."}
+            )
+        return data
 
 
 class RemoveSerializer(serializers.Serializer):
@@ -142,6 +152,12 @@ class RemoveSerializer(serializers.Serializer):
 # ================= SETTINGS =================
 class MentoringSettingSerializer(serializers.ModelSerializer):
     department_name = serializers.CharField(source="department.name", read_only=True)
+
+    # Derived from MentorRule.grade_mix now, not stored on MentoringSetting.
+    # Still returned so the settings screen can show the rule, but it cannot be
+    # written from here — the HOD changes it on the mentor rules screen, which
+    # is the one place the policy lives.
+    require_all_bands = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = MentoringSetting
@@ -153,8 +169,8 @@ class MentoringSettingSerializer(serializers.ModelSerializer):
             "require_all_bands", "route_via_advisor",
             "first_year_rule", "updated_at",
         ]
-        read_only_fields = ["id", "department", "department_name", "updated_at"]
-
+        read_only_fields = ["id", "department", "department_name",
+                            "require_all_bands", "updated_at"]
 
 
 # ================= CHANGE REQUEST =================
@@ -218,7 +234,7 @@ class ChangeRequestSerializer(serializers.ModelSerializer):
         if o.is_confidential:
             return "Confidential"
         if o.advisor_acted_at:
-            return "Forwarded by advisor"
+            return "Forwarded by tutor"
         return "From a student"
 
 
@@ -261,7 +277,7 @@ class CreateChangeRequestSerializer(serializers.Serializer):
 
 
 class AdvisorActSerializer(serializers.Serializer):
-    """POST body a class advisor uses to forward or resolve."""
+    """POST body a tutor uses to forward or resolve."""
     action = serializers.ChoiceField(choices=["forward", "resolve"])
     note = serializers.CharField()
 

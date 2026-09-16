@@ -105,7 +105,7 @@ export const yearLabel = (y) =>
 // Pill for a change request status.
 export const requestPill = (status) =>
   ({
-    advisor: { cls: "ma-amber", label: "With the class advisor" },
+    advisor: { cls: "ma-amber", label: "With theclass tutor" },
     hod: { cls: "ma-blue", label: "Waiting on you" },
     approved: { cls: "ma-green", label: "Approved" },
     rejected: { cls: "ma-red", label: "Rejected" },

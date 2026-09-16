@@ -17,7 +17,7 @@ const MAX_UPLOAD = 10 * 1024 * 1024; // 10 MB — matches the server
  * Private 1-to-1 conversations, living inside the class group.
  *
  * Staff  (isOwner) — the students of the class they advise, one thread each.
- * Student          — their class advisor, a single thread.
+ * Student          — theirtutor, a single thread.
  *
  * This is NOT the mentor conversation. The server tags every message written
  * here as context="advisor", and the mentor thread is read only by My Mentees
@@ -51,7 +51,7 @@ export default function ClassPrivate({ isOwner, groupId, advisor }) {
   useEffect(() => {
     let alive = true;
 
-    // A student has exactly one contact: their class advisor, already in the
+    // A student has exactly one contact: theirtutor, already in the
     // group payload. No lookup needed.
     if (!isOwner) {
       const one = advisor
@@ -59,7 +59,7 @@ export default function ClassPrivate({ isOwner, groupId, advisor }) {
             id: advisor.id,
             username: advisor.name,
             roll_number: "",
-            subject: "Class advisor",
+            subject: "Tutor",
           }]
         : [];
       setContacts(one);
@@ -175,7 +175,7 @@ export default function ClassPrivate({ isOwner, groupId, advisor }) {
         <div className="cg-aud">
           {isOwner
             ? "Nobody to message. This tab lists the students of the class you advise."
-            : "Your class has no class advisor assigned yet, so there is nobody to message here."}
+            : "Your class has notutor assigned yet, so there is nobody to message here."}
         </div>
       </div>
     );
@@ -295,8 +295,8 @@ export default function ClassPrivate({ isOwner, groupId, advisor }) {
                   No messages yet
                 </b>
                 {isOwner
-                  ? `Write the first one below. ${active?.username} sees it under their class advisor, not in the class conversation.`
-                  : "Write the first one below. Only your class advisor sees it."}
+                  ? `Write the first one below. ${active?.username} sees it under theirtutor, not in the class conversation.`
+                  : "Write the first one below. Only yourtutor sees it."}
               </div>
             )}
 
@@ -428,7 +428,7 @@ export default function ClassPrivate({ isOwner, groupId, advisor }) {
                   placeholder={
                     isOwner
                       ? `Write privately to ${active.username}…`
-                      : "Write to your class advisor…"
+                      : "Write to yourtutor…"
                   }
                   onChange={(e) => setText(e.target.value)}
                   onKeyDown={(e) => {

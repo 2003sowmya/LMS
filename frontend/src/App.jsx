@@ -69,6 +69,7 @@ import HodMentorDetail from "./features/mentoring/HodMentorDetail";
 import HodAllocationHistory from "./features/mentoring/HodAllocationHistory";
 import HodChangeRequests from "./features/mentoring/HodChangeRequests";
 import HodMentoringSettings from "./features/mentoring/HodMentoringSettings";
+import HodTeamProposals from "./features/mentoring/HodTeamProposals";
 import StaffMyMentees from "./features/mentoring/StaffMyMentees";
 import StudentMyMentor from "./features/mentoring/StudentMyMentor";
 
@@ -382,6 +383,8 @@ function App() {
           <ProtectedRoute role="teacher"><HodMentoringSettings /></ProtectedRoute>} />
         <Route path="/hod/mentors/:mentorId" element={
           <ProtectedRoute role="teacher"><HodMentorDetail /></ProtectedRoute>} />
+        <Route path="/hod/team-proposals" element={
+          <ProtectedRoute role="teacher"><HodTeamProposals /></ProtectedRoute>} />
 
         {/* ================= MY MENTEES (STAFF) ================= */}
         <Route path="/my-mentees" element={
